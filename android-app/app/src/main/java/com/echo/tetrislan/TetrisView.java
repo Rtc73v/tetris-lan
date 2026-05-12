@@ -286,24 +286,24 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void layoutGame(int w, int h) {
-        float top = 60, bottomControls = h - 150;
+        float top = 88, bottomControls = h - 180;
         bw = Math.min(w * 0.74f, (bottomControls - top) * C / (float)R);
         bh = bw * R / C;
         bx = 8; by = top;
         cell = bw / C;
         btns.clear();
-        float topW = Math.max(96, w * 0.22f), topH = 48;
-        topBtnY = 30;
+        float topW = Math.max(140, w * 0.30f), topH = 60;
+        topBtnY = 44;
         addBtn("设置", 8, w - topW * 1.55f, topBtnY, topW, topH);
         addBtn("主界面", 9, w - topW * 0.52f, topBtnY, topW, topH);
-        float bwBtn = Math.max(102, w * 0.31f), bhBtn = bwBtn * 0.56f, gap = 9;
-        float y2 = h - bhBtn/2 - 8, y1 = y2 - bhBtn - gap;
-        addBtn("旋转", 0, bwBtn/2+6, y1, bwBtn, bhBtn);
+        float bwBtn = Math.max(108, w * 0.31f), bhBtn = bwBtn * 0.56f, gap = 10;
+        float y2 = h - bhBtn/2 - 24, y1 = y2 - bhBtn - gap;
+        addBtn("旋转", 0, bwBtn/2+8, y1, bwBtn, bhBtn);
         addBtn("速降", 1, w/2f, y1, bwBtn, bhBtn);
-        addBtn("逆旋", 2, w-bwBtn/2-6, y1, bwBtn, bhBtn);
-        addBtn("左移", 3, bwBtn/2+6, y2, bwBtn, bhBtn);
+        addBtn("逆旋", 2, w-bwBtn/2-8, y1, bwBtn, bhBtn);
+        addBtn("左移", 3, bwBtn/2+8, y2, bwBtn, bhBtn);
         addBtn("软降", 4, w/2f, y2, bwBtn, bhBtn);
-        addBtn("右移", 5, w-bwBtn/2-6, y2, bwBtn, bhBtn);
+        addBtn("右移", 5, w-bwBtn/2-8, y2, bwBtn, bhBtn);
         float sideLeft = bx + bw + 8;
         float sideW = Math.max(70, w - sideLeft - 6);
         float sideX = sideLeft + sideW / 2;
@@ -314,11 +314,12 @@ public class TetrisView extends View implements Runnable {
     private void addBtn(String text, int action, float cx, float cy, float w, float h) { btns.add(new Btn(text, action, new RectF(cx-w/2, cy-h/2, cx+w/2, cy+h/2))); }
 
     private void drawTop(Canvas c) {
-        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(31); p.setColor(theme().text);
-        c.drawText("分", 8, 42, p); p.setColor(theme().score); c.drawText(String.valueOf(score), 50, 42, p);
-        p.setColor(theme().text); c.drawText("级", 122, 42, p); p.setColor(theme().score); c.drawText(String.valueOf(level), 164, 42, p);
-        p.setColor(theme().text); c.drawText("行", 214, 42, p); p.setColor(theme().score); c.drawText(String.valueOf(lines), 256, 42, p);
-        p.setColor(theme().textMuted); p.setTextSize(22); c.drawText((solo ? "单人" : "P2P") + " " + APP_VERSION + " " + theme().name, 310, 42, p);
+        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(34); p.setColor(theme().text);
+        c.drawText("分", 8, 52, p); p.setColor(theme().score); c.drawText(String.valueOf(score), 54, 52, p);
+        p.setColor(theme().text); c.drawText("级", 150, 52, p); p.setColor(theme().score); c.drawText(String.valueOf(level), 196, 52, p);
+        p.setColor(theme().text); c.drawText("行", 290, 52, p); p.setColor(theme().score); c.drawText(String.valueOf(lines), 336, 52, p);
+        p.setTextSize(24); p.setColor(theme().textMuted);
+        c.drawText((solo ? "单人" : "P2P") + " " + APP_VERSION + " " + theme().name, 8, 82, p);
     }
 
     private void drawBoard(Canvas c) {
@@ -360,10 +361,10 @@ public class TetrisView extends View implements Runnable {
     private void drawBtns(Canvas c) {
         p.setTextAlign(Paint.Align.CENTER);
         for (Btn b: btns) {
-            if (b.action == 8 || b.action == 9) p.setTextSize(22); else p.setTextSize(30);
+            if (b.action == 8 || b.action == 9) p.setTextSize(26); else p.setTextSize(30);
             p.setColor(b.action==6 ? theme().btnPause : (b.action>=8 ? theme().btnTop : theme().btn));
             c.drawRoundRect(b.r, 16, 16, p);
-            p.setColor(theme().text); c.drawText(b.text, b.r.centerX(), b.r.centerY()+(b.action>=8?8:11), p);
+            p.setColor(theme().text); c.drawText(b.text, b.r.centerX(), b.r.centerY()+(b.action>=8?10:11), p);
         }
     }
 
