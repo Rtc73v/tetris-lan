@@ -640,7 +640,7 @@ public class TetrisView extends View implements Runnable {
                 maybeCountdown();
             }
             @Override public void onChat(String host, String name, String text) { if (acceptPeer(host, name)) addChat(name + ": " + text); }
-            @Override public void onStart(long seed, long startAt) {
+            @Override public void onStart(String host, long seed, long startAt) {
                 if (!fromRoomHost(host)) return;
                 pendingStartSeed = seed; pendingStartAt = startAt; p2pStatus = "3秒后开始";
             }

@@ -24,7 +24,7 @@ public class P2pTransport {
         void onPeer(String host, String name, int score, int lines, String via);
         void onReady(String host, String name, boolean ready);
         void onChat(String host, String name, String text);
-        void onStart(long seed, long startAt);
+        void onStart(String host, long seed, long startAt);
         void onGarbage(int rows);
         void onLeave(String host, String name);
         void onKick(String host, String name, String targetName, String reason);
@@ -204,7 +204,7 @@ public class P2pTransport {
         if ("STATE".equals(p[3])) notifyPeer(host, p, via);
         if ("READY".equals(p[3])) listener.onReady(host, p[4], parseInt(p[5]) == 1);
         if ("CHAT".equals(p[3])) listener.onChat(host, p[4], unesc(p[5]));
-        if ("START".equals(p[3])) listener.onStart(parseLong(p[5]), parseLong(p[6]));
+        if ("START".equals(p[3])) listener.onStart(host, parseLong(p[5]), parseLong(p[6]));
         if ("GARBAGE".equals(p[3])) listener.onGarbage(parseInt(p[5]));
         if ("LEAVE".equals(p[3])) { listener.onLeave(host, p[4]); return; }
         if ("KICK".equals(p[3])) { listener.onKick(host, p[4], unesc(p[5]), unesc(p[6])); return; }
