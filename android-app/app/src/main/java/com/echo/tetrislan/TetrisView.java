@@ -25,7 +25,7 @@ import java.util.Random;
 
 public class TetrisView extends View implements Runnable {
     private static final int C = 10, R = 20;
-    private static final String APP_VERSION = "v1.6";
+    private static final String APP_VERSION = "v1.6.1";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -53,7 +53,7 @@ public class TetrisView extends View implements Runnable {
     private ToneGenerator toneGen;
     private int sMove, sRotate, sDrop, sClear, sTetris, sGarbage, sReady;
     private long lastP2pSend = 0;
-    private boolean running = true, menu = true, over = true, paused = false, settings = false;
+    private boolean running = true, menu = true, over = true, paused = false, settings = false, confirmQuit = false;
     private boolean solo = true, canHold = true;
     private int menuPage = 0; // 0 main, 1 solo actions, 2 multiplayer actions
     private int[][] board = new int[R][C];
@@ -417,6 +417,24 @@ public class TetrisView extends View implements Runnable {
         drawMenuButton(c, "读取存档", w*.16f, h*.43f, w*.84f, h*.51f, false);
         drawMenuButton(c, "手动保存", w*.16f, h*.54f, w*.84f, h*.62f, false);
         drawMenuButton(c, "返回主界面", w*.16f, h*.68f, w*.84f, h*.76f, false);
+        if (confirmQuit) {
+            p.setColor(0x88000000); c.drawRect(0, 0, w, h, p);
+            float dw=w*.78f, dh=h*.28f, dx=(w-dw)/2, dy=(h-dh)/2;
+            p.setStyle(Paint.Style.FILL); p.setColor(theme().bg);
+            c.drawRoundRect(new RectF(dx, dy, dx+dw, dy+dh), 24, 24, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(3); p.setColor(theme().boardStroke);
+            c.drawRoundRect(new RectF(dx, dy, dx+dw, dy+dh), 24, 24, p);
+            p.setStyle(Paint.Style.FILL);
+            p.setTextAlign(Paint.Align.CENTER);
+            p.setColor(theme().text); p.setTextSize(34);
+            c.drawText("保存游戏", w/2f, dy+dh*.26f, p);
+            p.setColor(theme().textMuted); p.setTextSize(24);
+            c.drawText("是否保存当前游戏进度？", w/2f, dy+dh*.52f, p);
+            float btnW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.76f, gap=dw*.05f;
+            drawMenuButton(c, "保存", w/2f-btnW*1.5f-gap, btnY, w/2f-btnW*.5f-gap, btnY+btnH, false);
+            drawMenuButton(c, "不保存", w/2f-btnW/2f, btnY, w/2f+btnW/2f, btnY+btnH, false);
+            drawMenuButton(c, "取消", w/2f+btnW*.5f+gap, btnY, w/2f+btnW*1.5f+gap, btnY+btnH, false);
+        }
     }
 
     private void block(Canvas c, int x, int y, int type, float alpha) {
@@ -485,20 +503,20 @@ public class TetrisView extends View implements Runnable {
 
     private boolean touchSettings(float x, float y) {
         int w=getWidth(), h=getHeight();
+        if (confirmQuit) {
+            float dw=w*.78f, dh=h*.28f, dy=(h-dh)/2;
+            float btnW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.72f, gap=dw*.05f;
+            float bx1=w/2f-btnW*1.5f-gap, bx2=w/2f-btnW/2f, bx3=w/2f+btnW/2f+gap;
+            if (hit(x,y,bx1,btnY,bx1+btnW,btnY+btnH)) { save(true); confirmQuit=false; goMenu(); return true; }
+            if (hit(x,y,bx2,btnY,bx2+btnW,btnY+btnH)) { confirmQuit=false; goMenu(); return true; }
+            if (hit(x,y,bx3,btnY,bx3+btnW,btnY+btnH)) { confirmQuit=false; return true; }
+            return true;
+        }
         if (hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; paused=false; return true; }
         if (hit(x,y,w*.16f,h*.43f,w*.84f,h*.51f)) { if (solo) load(); settings=false; return true; }
         if (hit(x,y,w*.16f,h*.54f,w*.84f,h*.62f)) { save(true); return true; }
         if (hit(x,y,w*.16f,h*.68f,w*.84f,h*.76f)) {
-            if (!over && started) {
-                new AlertDialog.Builder(getContext())
-                    .setTitle("保存游戏")
-                    .setMessage("是否保存当前游戏进度？")
-                    .setPositiveButton("保存", (d, i) -> { save(true); goMenu(); })
-                    .setNegativeButton("不保存", (d, i) -> goMenu())
-                    .setNeutralButton("取消", null)
-                    .show();
-                return true;
-            }
+            if (!over && !menu) { confirmQuit = true; return true; }
             goMenu(); return true;
         }
         return true;
@@ -712,6 +730,7 @@ public class TetrisView extends View implements Runnable {
         menu = true;
         settings = false;
         paused = false;
+        confirmQuit = false;
         menuPage = solo ? 1 : 2;
         pendingIRS = 0;
         pendingIHS = false;
