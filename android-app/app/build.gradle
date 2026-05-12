@@ -3,11 +3,24 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.echo.tetrislan'
     compileSdk 35
+    signingConfigs {
+        fixed {
+            storeFile file(System.getProperty('user.home') + '/.android/tetris.keystore')
+            storePassword 'android'
+            keyAlias 'tetris'
+            keyPassword 'android'
+        }
+    }
     defaultConfig {
         applicationId 'com.echo.tetrislan'
         minSdk 23
         targetSdk 35
-        versionCode 7
-        versionName '1.6.1'
+        versionCode 8
+        versionName '1.6.2'
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.fixed
+        }
     }
 }

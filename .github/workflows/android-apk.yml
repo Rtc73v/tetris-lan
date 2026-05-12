@@ -23,6 +23,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Cache keystore
+        uses: actions/cache@v4
+        id: cache-keystore
+        with:
+          path: ~/.android/tetris.keystore
+          key: tetris-keystore-v2
+
+      - name: Generate keystore
+        if: steps.cache-keystore.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v -keystore ~/.android/tetris.keystore -alias tetris \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=ECHO, OU=Tetris, O=LAN, L=Local, ST=State, C=CN"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -45,5 +61,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tetris-native-debug-apk
+          name: tetris-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
