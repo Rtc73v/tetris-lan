@@ -20,7 +20,7 @@ import java.util.Set;
 
 public class P2pTransport {
     public interface Listener {
-        void onRoomFound(String room, String host, String name);
+        void onRoomFound(String room, String host, String name, boolean hostRole);
         void onPeer(String host, String name, int score, int lines, String via);
         void onReady(String host, String name, boolean ready);
         void onChat(String host, String name, String text);
@@ -29,6 +29,7 @@ public class P2pTransport {
         void onLeave(String host, String name);
         void onKick(String host, String name, String targetName, String reason);
         void onDisband(String host, String name);
+        void onDisconnect(String host);
         void onError(String message);
     }
 
@@ -38,6 +39,7 @@ public class P2pTransport {
     private final String room;
     private final String pass;
     private final String name;
+    private final boolean hostRole;
     private final Map<String, Peer> peers = new HashMap<>();
     private final Set<String> connecting = new HashSet<>();
     private final Set<String> localAddresses = new HashSet<>();
@@ -51,10 +53,11 @@ public class P2pTransport {
     private int level = 1;
     private boolean over;
 
-    public P2pTransport(String room, String pass, String name, Listener listener) {
+    public P2pTransport(String room, String pass, String name, boolean hostRole, Listener listener) {
         this.room = safe(room, "ROOM");
         this.pass = safe(pass, "1234");
         this.name = safe(name, "P1");
+        this.hostRole = hostRole;
         this.listener = listener;
         localAddresses.add("127.0.0.1");
         localAddresses.add("0.0.0.0");
@@ -192,7 +195,7 @@ public class P2pTransport {
         if (localAddresses.contains(host)) return;
         String[] p = split(msg);
         if (p == null) return;
-        if ("HELLO".equals(p[3])) listener.onRoomFound(p[1], host, p[4]);
+        if ("HELLO".equals(p[3])) listener.onRoomFound(p[1], host, p[4], parseInt(p[7]) == 1);
         if (!validRoom(p)) return;
         if ("HELLO".equals(p[3])) {
             connectTcp(host);
@@ -251,7 +254,7 @@ public class P2pTransport {
     }
 
     private String helloPacket() {
-        return base("HELLO") + "|0|0|1|0";
+        return base("HELLO") + "|0|0|" + (hostRole ? 1 : 0) + "|0";
     }
 
     private String statePacket() {
@@ -331,6 +334,7 @@ public class P2pTransport {
             } finally {
                 close();
                 synchronized (peers) { peers.remove(host); }
+                listener.onDisconnect(host);
             }
         }
 
