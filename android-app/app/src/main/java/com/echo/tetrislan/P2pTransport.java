@@ -18,8 +18,11 @@ import java.util.Set;
 
 public class P2pTransport {
     public interface Listener {
+        void onRoomFound(String room, String host, String name);
         void onPeer(String host, String name, int score, int lines, String via);
-        void onStart(long seed);
+        void onReady(String host, String name, boolean ready);
+        void onChat(String host, String name, String text);
+        void onStart(long seed, long startAt);
         void onGarbage(int rows);
         void onError(String message);
     }
@@ -70,6 +73,8 @@ public class P2pTransport {
         }
     }
 
+    public String room() { return room; }
+
     public void publishState(int score, int lines, int level, boolean over) {
         this.score = score;
         this.lines = lines;
@@ -78,8 +83,20 @@ public class P2pTransport {
         sendReliable(statePacket());
     }
 
+    public void sendReady(boolean ready) {
+        sendReliable(base("READY") + "|" + (ready ? 1 : 0) + "|0|0|0");
+    }
+
+    public void sendChat(String text) {
+        sendReliable(base("CHAT") + "|" + esc(text) + "|0|0|0");
+    }
+
+    public void sendStart(long seed, long startAt) {
+        sendReliable(base("START") + "|" + seed + "|" + startAt + "|0|0");
+    }
+
     public void sendStart(long seed) {
-        sendReliable(base("START") + "|" + seed + "|0|0|0");
+        sendStart(seed, System.currentTimeMillis() + 3000);
     }
 
     public void sendGarbage(int rows) {
@@ -100,7 +117,7 @@ public class P2pTransport {
             udpSocket.setBroadcast(true);
             udpSocket.setSoTimeout(500);
             long last = 0;
-            byte[] buf = new byte[2048];
+            byte[] buf = new byte[4096];
             while (running) {
                 long now = System.currentTimeMillis();
                 if (now - last > 1000) {
@@ -139,13 +156,17 @@ public class P2pTransport {
 
     private void handleMessage(String host, String msg, String via) {
         String[] p = split(msg);
-        if (p == null || !validRoom(p)) return;
+        if (p == null) return;
+        if ("HELLO".equals(p[3])) listener.onRoomFound(p[1], host, p[4]);
+        if (!validRoom(p)) return;
         if ("HELLO".equals(p[3])) {
             connectTcp(host);
             return;
         }
         if ("STATE".equals(p[3])) notifyPeer(host, p, via);
-        if ("START".equals(p[3])) listener.onStart(parseLong(p[5]));
+        if ("READY".equals(p[3])) listener.onReady(host, p[4], parseInt(p[5]) == 1);
+        if ("CHAT".equals(p[3])) listener.onChat(host, p[4], unesc(p[5]));
+        if ("START".equals(p[3])) listener.onStart(parseLong(p[5]), parseLong(p[6]));
         if ("GARBAGE".equals(p[3])) listener.onGarbage(parseInt(p[5]));
     }
 
@@ -170,7 +191,7 @@ public class P2pTransport {
             synchronized (peers) { peers.put(host, peer); }
             peer.send(helloPacket());
             peer.send(statePacket());
-            new Thread(() -> peer.readLoop(), "tetris-p2p-peer").start();
+            new Thread(peer::readLoop, "tetris-p2p-peer").start();
         } catch (Exception e) {
             listener.onError("Peer " + e.getMessage());
         }
@@ -229,6 +250,14 @@ public class P2pTransport {
         if (value == null) return fallback;
         String v = value.trim().replace("|", "");
         return v.isEmpty() ? fallback : v;
+    }
+
+    private static String esc(String value) {
+        return safe(value, "").replace("%", "%25").replace("\n", " ").replace("|", "%7C");
+    }
+
+    private static String unesc(String value) {
+        return value.replace("%7C", "|").replace("%25", "%");
     }
 
     private class Peer {

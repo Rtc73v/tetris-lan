@@ -1,5 +1,6 @@
 package com.echo.tetrislan;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
@@ -8,6 +9,8 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.View;
+import android.text.InputType;
+import android.widget.EditText;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -25,10 +28,14 @@ public class TetrisView extends View implements Runnable {
     private Thread loop;
     private P2pTransport p2p;
     private String p2pStatus = "P2P未启动";
-    private final String roomName = "TETRIS";
+    private String roomName = "TETRIS";
     private final String roomPass = "1234";
     private final String playerName = "P" + (100 + rnd.nextInt(900));
     private String peerHost = null, peerName = "-", peerVia = "-";
+    private String foundRoom = "-", foundHost = "-", foundName = "-";
+    private boolean selfReady = false, peerReady = false;
+    private long pendingStartAt = 0, pendingStartSeed = 0;
+    private final List<String> chat = new ArrayList<>();
     private int peerScore = 0, peerLines = 0;
     private int pendingGarbage = 0;
     private long lastP2pSend = 0;
@@ -75,6 +82,12 @@ public class TetrisView extends View implements Runnable {
     @Override public void run() {
         while (running) {
             long now = System.currentTimeMillis();
+            if (pendingStartAt > 0 && now >= pendingStartAt) {
+                long seed = pendingStartSeed;
+                pendingStartAt = 0;
+                pendingStartSeed = 0;
+                start(seed);
+            }
             if (!menu && !over && !paused && !settings) {
                 if (now - lastDrop > dropMs) {
                     if (!move(0, 1)) lock();
@@ -121,13 +134,32 @@ public class TetrisView extends View implements Runnable {
             return;
         }
         boolean multi = menuPage == 2;
-        p.setColor(0xff00e5ff); p.setTextSize(28); c.drawText(multi ? "多人模式" : "单人模式", w/2f, h*0.25f, p);
-        drawMenuButton(c, multi ? "同步开局" : "开始新局", w*0.14f, h*0.34f, w*0.86f, h*0.43f, false);
-        drawMenuButton(c, "读取存档", w*0.14f, h*0.46f, w*0.86f, h*0.55f, false);
-        drawMenuButton(c, "手动保存", w*0.14f, h*0.58f, w*0.86f, h*0.67f, false);
-        drawMenuButton(c, "返回主菜单", w*0.14f, h*0.73f, w*0.86f, h*0.82f, false);
-        p.setColor(0xffaaaaaa); p.setTextSize(22);
-        c.drawText(multi ? roomName + "/" + roomPass + " " + p2pStatus : "单人支持自动/手动保存", w/2f, h*0.90f, p);
+        p.setColor(0xff00e5ff); p.setTextSize(28); c.drawText(multi ? "多人大厅" : "单人模式", w/2f, h*0.25f, p);
+        if (!multi) {
+            drawMenuButton(c, "开始新局", w*0.14f, h*0.34f, w*0.86f, h*0.43f, false);
+            drawMenuButton(c, "读取存档", w*0.14f, h*0.46f, w*0.86f, h*0.55f, false);
+            drawMenuButton(c, "手动保存", w*0.14f, h*0.58f, w*0.86f, h*0.67f, false);
+            drawMenuButton(c, "返回主菜单", w*0.14f, h*0.73f, w*0.86f, h*0.82f, false);
+            p.setColor(0xffaaaaaa); p.setTextSize(22); c.drawText("单人支持自动/手动保存", w/2f, h*0.90f, p);
+            return;
+        }
+        drawMenuButton(c, "创建房间", w*0.08f, h*0.31f, w*0.46f, h*0.39f, false);
+        drawMenuButton(c, "输入房号", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
+        drawMenuButton(c, "加入发现", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
+        drawMenuButton(c, selfReady ? "取消准备" : "准备", w*0.54f, h*0.42f, w*0.92f, h*0.50f, selfReady);
+        drawMenuButton(c, "聊天", w*0.08f, h*0.53f, w*0.46f, h*0.61f, false);
+        drawMenuButton(c, "返回主菜单", w*0.54f, h*0.53f, w*0.92f, h*0.61f, false);
+        p.setColor(Color.WHITE); p.setTextSize(22);
+        c.drawText("房间 " + roomName + "  我:" + (selfReady?"已准备":"未准备") + " 对方:" + (peerReady?"已准备":"未准备"), w/2f, h*0.68f, p);
+        p.setColor(0xffaaaaaa); p.setTextSize(19);
+        c.drawText("发现 " + foundRoom + " / " + foundName + " " + foundHost, w/2f, h*0.72f, p);
+        c.drawText(p2pStatus, w/2f, h*0.76f, p);
+        int start = Math.max(0, chat.size() - 4);
+        for (int i=start;i<chat.size();i++) c.drawText(chat.get(i), w/2f, h*(0.81f + 0.035f*(i-start)), p);
+        if (pendingStartAt > 0) {
+            long left = Math.max(0, (pendingStartAt - System.currentTimeMillis() + 999) / 1000);
+            p.setColor(0xffffab40); p.setTextSize(34); c.drawText("倒计时 " + left, w/2f, h*0.96f, p);
+        }
     }
 
     private void drawMenuButton(Canvas c, String text, float l, float t, float r, float b, boolean on) {
@@ -255,10 +287,19 @@ public class TetrisView extends View implements Runnable {
             if (hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { solo=false; menuPage=2; startP2p(); return true; }
             return true;
         }
-        if (hit(x,y,w*.14f,h*.34f,w*.86f,h*.43f)) { if (solo) start(); else syncStart(); return true; }
-        if (hit(x,y,w*.14f,h*.46f,w*.86f,h*.55f)) { if (solo) load(); return true; }
-        if (hit(x,y,w*.14f,h*.58f,w*.86f,h*.67f)) { if (solo) save(true); return true; }
-        if (hit(x,y,w*.14f,h*.73f,w*.86f,h*.82f)) { menuPage=0; return true; }
+        if (menuPage == 1) {
+            if (hit(x,y,w*.14f,h*.34f,w*.86f,h*.43f)) { start(); return true; }
+            if (hit(x,y,w*.14f,h*.46f,w*.86f,h*.55f)) { load(); return true; }
+            if (hit(x,y,w*.14f,h*.58f,w*.86f,h*.67f)) { save(true); return true; }
+            if (hit(x,y,w*.14f,h*.73f,w*.86f,h*.82f)) { menuPage=0; return true; }
+            return true;
+        }
+        if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
+        if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
+        if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { joinFound(); return true; }
+        if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { toggleReady(); return true; }
+        if (hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) { askChat(); return true; }
+        if (hit(x,y,w*.54f,h*.53f,w*.92f,h*.61f)) { stopP2p(); menuPage=0; return true; }
         return true;
     }
 
@@ -276,6 +317,9 @@ public class TetrisView extends View implements Runnable {
         if (p2p != null) return;
         p2pStatus = "房间广播中";
         p2p = new P2pTransport(roomName, roomPass, playerName, new P2pTransport.Listener() {
+            @Override public void onRoomFound(String room, String host, String name) {
+                if (!roomName.equals(room)) { foundRoom = room; foundHost = host; foundName = name; }
+            }
             @Override public void onPeer(String host, String name, int score, int lines, String via) {
                 peerHost = host;
                 peerName = name;
@@ -284,7 +328,15 @@ public class TetrisView extends View implements Runnable {
                 peerVia = via;
                 p2pStatus = "已连接 " + host;
             }
-            @Override public void onStart(long seed) { start(seed); p2pStatus = "同步开局"; }
+            @Override public void onReady(String host, String name, boolean ready) {
+                peerHost = host; peerName = name; peerReady = ready;
+                addChat("系统: " + name + (ready ? " 已准备" : " 取消准备"));
+                maybeCountdown();
+            }
+            @Override public void onChat(String host, String name, String text) { addChat(name + ": " + text); }
+            @Override public void onStart(long seed, long startAt) {
+                pendingStartSeed = seed; pendingStartAt = startAt; p2pStatus = "3秒后开始";
+            }
             @Override public void onGarbage(int rows) { pendingGarbage += rows; p2pStatus = "收到垃圾 " + rows; }
             @Override public void onError(String message) { p2pStatus = "P2P错误"; }
         });
@@ -298,9 +350,88 @@ public class TetrisView extends View implements Runnable {
     private void syncStart() {
         startP2p();
         long seed = System.currentTimeMillis();
-        start(seed);
-        p2p.sendStart(seed);
-        p2pStatus = "已发起开局";
+        long at = System.currentTimeMillis() + 3000;
+        pendingStartSeed = seed;
+        pendingStartAt = at;
+        p2p.sendStart(seed, at);
+        p2pStatus = "3秒后开始";
+    }
+
+    private void createRoom() {
+        roomName = "R" + (1000 + rnd.nextInt(9000));
+        restartP2p();
+        addChat("系统: 已创建房间 " + roomName);
+    }
+
+    private void askRoom() {
+        askText("输入房间号", roomName, text -> {
+            roomName = clean(text, "TETRIS");
+            restartP2p();
+            addChat("系统: 已进入房间 " + roomName);
+        });
+    }
+
+    private void joinFound() {
+        if ("-".equals(foundRoom)) return;
+        roomName = foundRoom;
+        restartP2p();
+        addChat("系统: 加入发现房间 " + roomName);
+    }
+
+    private void toggleReady() {
+        startP2p();
+        selfReady = !selfReady;
+        p2p.sendReady(selfReady);
+        addChat("我: " + (selfReady ? "已准备" : "取消准备"));
+        maybeCountdown();
+    }
+
+    private void maybeCountdown() {
+        if (selfReady && peerReady && pendingStartAt == 0 && playerName.compareTo(peerName) < 0) syncStart();
+    }
+
+    private void askChat() {
+        askText("聊天", "", text -> {
+            String t = clean(text, "");
+            if (t.isEmpty()) return;
+            startP2p();
+            p2p.sendChat(t);
+            addChat("我: " + t);
+        });
+    }
+
+    private void askText(String title, String value, TextDone done) {
+        EditText input = new EditText(getContext());
+        input.setSingleLine(true);
+        input.setText(value);
+        input.setSelectAllOnFocus(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        new AlertDialog.Builder(getContext()).setTitle(title).setView(input)
+            .setPositiveButton("确定", (d, which) -> done.apply(input.getText().toString()))
+            .setNegativeButton("取消", null).show();
+    }
+
+    private String clean(String s, String fallback) {
+        if (s == null) return fallback;
+        String v = s.trim().replace("|", "");
+        return v.isEmpty() ? fallback : v;
+    }
+
+    private void addChat(String line) {
+        chat.add(line.length() > 28 ? line.substring(0, 28) : line);
+        while (chat.size() > 20) chat.remove(0);
+    }
+
+    private void restartP2p() {
+        stopP2p();
+        selfReady = false; peerReady = false; pendingStartAt = 0; pendingStartSeed = 0;
+        startP2p();
+    }
+
+    private void stopP2p() {
+        if (p2p != null) { p2p.stop(); p2p = null; }
+        p2pStatus = "P2P未启动";
+        selfReady = false; peerReady = false;
     }
 
     private void act(int a) {
@@ -339,6 +470,7 @@ public class TetrisView extends View implements Runnable {
     private JSONArray arr(int[][] b)throws Exception{ JSONArray a=new JSONArray(); for(int y=0;y<R;y++){JSONArray row=new JSONArray(); for(int x=0;x<C;x++) row.put(b[y][x]); a.put(row);} return a; }
     private int[][] board(JSONArray a)throws Exception{ int[][] b=new int[R][C]; for(int y=0;y<R;y++){JSONArray row=a.getJSONArray(y); for(int x=0;x<C;x++) b[y][x]=row.getInt(x);} return b; }
 
+    private interface TextDone { void apply(String text); }
     private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }
     private static class Piece { int type,x=3,y=0; int[][] s; Piece(int t){type=t; s=copy(SHAPES[t]);} Piece(JSONObject o)throws Exception{type=o.getInt("type");x=o.getInt("x");y=o.getInt("y");JSONArray a=o.getJSONArray("s");s=new int[a.length()][a.length()];for(int r=0;r<a.length();r++){JSONArray row=a.getJSONArray(r);for(int c=0;c<row.length();c++)s[r][c]=row.getInt(c);}} JSONObject json()throws Exception{JSONObject o=new JSONObject();o.put("type",type);o.put("x",x);o.put("y",y);JSONArray a=new JSONArray();for(int[] rr:s){JSONArray row=new JSONArray();for(int v:rr)row.put(v);a.put(row);}o.put("s",a);return o;} static int[][] copy(int[][] m){int[][] n=new int[m.length][m.length];for(int i=0;i<m.length;i++)n[i]=m[i].clone();return n;} }
 }
