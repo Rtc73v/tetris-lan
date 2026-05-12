@@ -31,7 +31,7 @@ import java.util.Random;
 
 public class TetrisView extends View implements Runnable {
     private static final int C = 10, R = 20;
-    private static final String APP_VERSION = "v1.6.6";
+    private static final String APP_VERSION = "v1.6.7";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -366,13 +366,6 @@ public class TetrisView extends View implements Runnable {
         c.drawText("分", 12, 80, p); p.setTextSize(68); p.setColor(theme().score); c.drawText(String.valueOf(score), 82, 80, p);
         p.setTextSize(64); p.setColor(theme().text); c.drawText("级", 230, 80, p); p.setTextSize(68); p.setColor(theme().score); c.drawText(String.valueOf(level), 290, 80, p);
         p.setTextSize(64); p.setColor(theme().text); c.drawText("行", 420, 80, p); p.setTextSize(68); p.setColor(theme().score); c.drawText(String.valueOf(lines), 480, 80, p);
-        p.setTextSize(42); p.setColor(theme().textMuted);
-        c.drawText((solo ? "单人" : "P2P") + " " + APP_VERSION + " " + theme().name, 12, 128, p);
-        String timeStr = timeFmt.format(new Date());
-        String battStr = batteryPct >= 0 ? (batteryPct + "%") : "";
-        String rightInfo = timeStr + (battStr.isEmpty() ? "" : "  " + battStr);
-        p.setTextAlign(Paint.Align.RIGHT); p.setTextSize(38); p.setColor(theme().textMuted);
-        c.drawText(rightInfo, getWidth() - 12, 128, p);
     }
 
     private void drawBoard(Canvas c) {
@@ -384,6 +377,11 @@ public class TetrisView extends View implements Runnable {
             drawPiece(c, cur, cur.y, 1f);
         }
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); p.setColor(theme().boardStroke); c.drawRect(bx,by,bx+bw,by+bh,p); p.setStyle(Paint.Style.FILL);
+        String timeStr = timeFmt.format(new Date());
+        String battStr = batteryPct >= 0 ? (batteryPct + "%") : "";
+        String info = timeStr + (battStr.isEmpty() ? "" : "  " + battStr);
+        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(30); p.setColor(theme().textMuted);
+        c.drawText(info, bx, by + bh + 36, p);
     }
 
     private void drawSide(Canvas c) {
