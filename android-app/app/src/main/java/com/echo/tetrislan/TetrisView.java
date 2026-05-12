@@ -21,6 +21,7 @@ import java.util.Random;
 
 public class TetrisView extends View implements Runnable {
     private static final int C = 10, R = 20;
+    private static final String APP_VERSION = "v1.3";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -125,7 +126,7 @@ public class TetrisView extends View implements Runnable {
 
     private void drawMenu(Canvas c, int w, int h) {
         p.setTextAlign(Paint.Align.CENTER);
-        p.setColor(Color.WHITE); p.setTextSize(44); c.drawText("Tetris Native", w/2f, h*0.16f, p);
+        p.setColor(Color.WHITE); p.setTextSize(44); c.drawText("Tetris Native " + APP_VERSION, w/2f, h*0.16f, p);
         if (menuPage == 0) {
             drawMenuButton(c, "单人模式", w*0.14f, h*0.30f, w*0.86f, h*0.39f, false);
             drawMenuButton(c, "多人模式", w*0.14f, h*0.43f, w*0.86f, h*0.52f, false);
@@ -170,17 +171,17 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void layoutGame(int w, int h) {
-        float top = 46, bottomControls = h - 132;
-        bw = Math.min(w * 0.76f, (bottomControls - top) * C / (float)R);
+        float top = 60, bottomControls = h - 150;
+        bw = Math.min(w * 0.74f, (bottomControls - top) * C / (float)R);
         bh = bw * R / C;
         bx = 8; by = top;
         cell = bw / C;
         btns.clear();
-        float topW = Math.max(78, w * 0.18f), topH = 36;
-        topBtnY = 24;
+        float topW = Math.max(96, w * 0.22f), topH = 48;
+        topBtnY = 30;
         addBtn("设置", 8, w - topW * 1.55f, topBtnY, topW, topH);
         addBtn("主界面", 9, w - topW * 0.52f, topBtnY, topW, topH);
-        float bwBtn = Math.max(88, w * 0.29f), bhBtn = bwBtn * 0.52f, gap = 8;
+        float bwBtn = Math.max(102, w * 0.31f), bhBtn = bwBtn * 0.56f, gap = 9;
         float y2 = h - bhBtn/2 - 8, y1 = y2 - bhBtn - gap;
         addBtn("旋转", 0, bwBtn/2+6, y1, bwBtn, bhBtn);
         addBtn("速降", 1, w/2f, y1, bwBtn, bhBtn);
@@ -198,11 +199,11 @@ public class TetrisView extends View implements Runnable {
     private void addBtn(String text, int action, float cx, float cy, float w, float h) { btns.add(new Btn(text, action, new RectF(cx-w/2, cy-h/2, cx+w/2, cy+h/2))); }
 
     private void drawTop(Canvas c) {
-        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(24); p.setColor(Color.WHITE);
-        c.drawText("分 ", 8, 33, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(score), 44, 33, p);
-        p.setColor(Color.WHITE); c.drawText("级 ", 116, 33, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(level), 152, 33, p);
-        p.setColor(Color.WHITE); c.drawText("行 ", 194, 33, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(lines), 230, 33, p);
-        p.setColor(0xff888899); p.setTextSize(18); c.drawText(solo ? "单人" : "P2P", 276, 33, p);
+        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(31); p.setColor(Color.WHITE);
+        c.drawText("分", 8, 42, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(score), 50, 42, p);
+        p.setColor(Color.WHITE); c.drawText("级", 122, 42, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(level), 164, 42, p);
+        p.setColor(Color.WHITE); c.drawText("行", 214, 42, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(lines), 256, 42, p);
+        p.setColor(0xff888899); p.setTextSize(22); c.drawText((solo ? "单人" : "P2P") + " " + APP_VERSION, 310, 42, p);
     }
 
     private void drawBoard(Canvas c) {
@@ -221,12 +222,12 @@ public class TetrisView extends View implements Runnable {
         float sideW = Math.max(70, getWidth() - sx - 6);
         float cx = sx + sideW / 2;
         float box = Math.min(92, sideW);
-        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(19); p.setColor(0xffaaaaaa);
-        c.drawText("下一个", cx, by+20, p); mini(c, next, cx-box/2, by+30, box);
-        c.drawText("暂存", cx, by+128, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, by+138, box);
-        c.drawText("对手", cx, by+236, p);
-        p.setTextSize(15); c.drawText(solo ? "单人模式" : p2pStatus, cx, by+265, p);
-        if (!solo) c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, by+288, p);
+        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(23); p.setColor(0xffaaaaaa);
+        c.drawText("下一个", cx, by+24, p); mini(c, next, cx-box/2, by+36, box);
+        c.drawText("暂存", cx, by+146, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, by+158, box);
+        c.drawText("对手", cx, by+268, p);
+        p.setTextSize(18); c.drawText(solo ? "单人模式" : p2pStatus, cx, by+300, p);
+        if (!solo) c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, by+326, p);
     }
 
     private void mini(Canvas c, Piece pc, float x, float y, float box) {
@@ -241,10 +242,10 @@ public class TetrisView extends View implements Runnable {
     private void drawBtns(Canvas c) {
         p.setTextAlign(Paint.Align.CENTER);
         for (Btn b: btns) {
-            if (b.action == 8 || b.action == 9) p.setTextSize(18); else p.setTextSize(25);
+            if (b.action == 8 || b.action == 9) p.setTextSize(22); else p.setTextSize(30);
             p.setColor(b.action==6 ? 0xffffab40 : (b.action>=8 ? 0xff252542 : 0xcc1e1e30));
             c.drawRoundRect(b.r, 16, 16, p);
-            p.setColor(Color.WHITE); c.drawText(b.text, b.r.centerX(), b.r.centerY()+(b.action>=8?7:9), p);
+            p.setColor(Color.WHITE); c.drawText(b.text, b.r.centerX(), b.r.centerY()+(b.action>=8?8:11), p);
         }
     }
 
