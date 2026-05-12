@@ -24,6 +24,9 @@ public class P2pTransport {
         void onChat(String host, String name, String text);
         void onStart(long seed, long startAt);
         void onGarbage(int rows);
+        void onLeave(String host, String name);
+        void onKick(String host, String name, String targetName, String reason);
+        void onDisband(String host, String name);
         void onError(String message);
     }
 
@@ -104,6 +107,22 @@ public class P2pTransport {
         sendReliable(base("GARBAGE") + "|" + rows + "|0|0|0");
     }
 
+    public void sendLeave() {
+        sendReliable(base("LEAVE") + "|0|0|0|0");
+    }
+
+    public void sendKick(String targetHost, String targetName, String reason) {
+        sendReliable(base("KICK") + "|" + esc(targetName) + "|" + esc(reason) + "|0|0");
+        synchronized (peers) {
+            Peer p = peers.get(targetHost);
+            if (p != null) { p.close(); peers.remove(targetHost); }
+        }
+    }
+
+    public void sendDisband() {
+        sendReliable(base("DISBAND") + "|0|0|0|0");
+    }
+
     private void sendReliable(String msg) {
         sendUdp("255.255.255.255", msg);
         synchronized (peers) {
@@ -168,6 +187,9 @@ public class P2pTransport {
         if ("CHAT".equals(p[3])) listener.onChat(host, p[4], unesc(p[5]));
         if ("START".equals(p[3])) listener.onStart(parseLong(p[5]), parseLong(p[6]));
         if ("GARBAGE".equals(p[3])) listener.onGarbage(parseInt(p[5]));
+        if ("LEAVE".equals(p[3])) { listener.onLeave(host, p[4]); return; }
+        if ("KICK".equals(p[3])) { listener.onKick(host, p[4], unesc(p[5]), unesc(p[6])); return; }
+        if ("DISBAND".equals(p[3])) { listener.onDisband(host, p[4]); return; }
     }
 
     private void connectTcp(String host) {

@@ -11,6 +11,12 @@ import android.media.ToneGenerator;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.View;
+import java.util.Locale;
+import java.util.Date;
+import java.text.SimpleDateFormat;
+import android.content.IntentFilter;
+import android.content.Intent;
+import android.content.BroadcastReceiver;
 import android.text.InputType;
 import android.widget.EditText;
 
@@ -25,7 +31,7 @@ import java.util.Random;
 
 public class TetrisView extends View implements Runnable {
     private static final int C = 10, R = 20;
-    private static final String APP_VERSION = "v1.6.3";
+    private static final String APP_VERSION = "v1.6.5";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -76,6 +82,10 @@ public class TetrisView extends View implements Runnable {
     private final Map<Integer, Integer> pointerActions = new HashMap<>();
     private int[] bag = new int[7];
     private int bagIndex = 7;
+    private boolean isHost = false;
+    private BroadcastReceiver batteryReceiver;
+    private int batteryPct = -1;
+    private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private float bx, by, cell, bw, bh, topBtnY;
 
     private static final int[][][] SHAPES = {
@@ -152,18 +162,31 @@ public class TetrisView extends View implements Runnable {
         p.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD));
         initSound();
         setFocusable(true);
+        batteryReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context ctx, Intent intent) {
+                int level = intent.getIntExtra("level", -1);
+                int scale = intent.getIntExtra("scale", -1);
+                batteryPct = level >= 0 && scale > 0 ? (int)(level * 100f / scale) : -1;
+            }
+        };
     }
 
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         loop = new Thread(this, "tetris-loop");
         loop.start();
+        if (batteryReceiver != null) {
+            getContext().registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        }
     }
 
     @Override protected void onDetachedFromWindow() {
         running = false;
         if (p2p != null) p2p.stop();
         if (toneGen != null) toneGen.release();
+        if (batteryReceiver != null) {
+            try { getContext().unregisterReceiver(batteryReceiver); } catch (Exception e) {}
+        }
         super.onDetachedFromWindow();
     }
 
@@ -259,19 +282,42 @@ public class TetrisView extends View implements Runnable {
             p.setColor(theme().textMuted); p.setTextSize(22); c.drawText("单人支持自动/手动保存", w/2f, h*0.90f, p);
             return;
         }
-        drawMenuButton(c, "创建房间", w*0.08f, h*0.31f, w*0.46f, h*0.39f, false);
-        drawMenuButton(c, "输入房号", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
-        drawMenuButton(c, "加入发现", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
-        drawMenuButton(c, selfReady ? "取消准备" : "准备", w*0.54f, h*0.42f, w*0.92f, h*0.50f, selfReady);
-        drawMenuButton(c, "聊天", w*0.08f, h*0.53f, w*0.46f, h*0.61f, false);
-        drawMenuButton(c, "返回主菜单", w*0.54f, h*0.53f, w*0.92f, h*0.61f, false);
+        if (p2p == null) {
+            drawMenuButton(c, "创建房间", w*0.08f, h*0.31f, w*0.46f, h*0.39f, false);
+            drawMenuButton(c, "输入房号", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
+            drawMenuButton(c, "加入发现", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
+            drawMenuButton(c, "返回主菜单", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
+        } else {
+            drawMenuButton(c, selfReady ? "取消准备" : "准备", w*0.08f, h*0.31f, w*0.46f, h*0.39f, selfReady);
+            drawMenuButton(c, "聊天", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
+            drawMenuButton(c, "退出房间", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
+            if (isHost) {
+                drawMenuButton(c, "解散房间", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
+            } else {
+                drawMenuButton(c, "返回主菜单", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
+            }
+            if (isHost && !peerNames.isEmpty()) {
+                drawMenuButton(c, "踢人", w*0.08f, h*0.53f, w*0.46f, h*0.61f, false);
+            }
+        }
         p.setColor(theme().text); p.setTextSize(22);
         c.drawText("房间 " + roomName + "  准备 " + readyCount() + "/" + playerCount() + "  最少2人", w/2f, h*0.68f, p);
+        if (p2p != null) {
+            p.setColor(theme().score); p.setTextSize(22);
+            c.drawText("玩家: " + playerName + (isHost ? "[房主]" : ""), w/2f, h*0.72f, p);
+            int py = 0;
+            for (java.util.Map.Entry<String, String> e : peerNames.entrySet()) {
+                c.drawText(e.getValue() + (readyPeers.getOrDefault(e.getKey(), false) ? " [已准备]" : ""), w/2f, h*(0.755f + 0.035f*py), p);
+                py++;
+            }
+        } else {
+            p.setColor(theme().textMuted); p.setTextSize(19);
+            c.drawText("发现 " + foundRoom + " / " + foundName + " " + foundHost, w/2f, h*0.72f, p);
+        }
         p.setColor(theme().textMuted); p.setTextSize(19);
-        c.drawText("发现 " + foundRoom + " / " + foundName + " " + foundHost, w/2f, h*0.72f, p);
-        c.drawText(p2pStatus, w/2f, h*0.76f, p);
+        c.drawText(p2pStatus, w/2f, h*0.84f, p);
         int start = Math.max(0, chat.size() - 4);
-        for (int i=start;i<chat.size();i++) c.drawText(chat.get(i), w/2f, h*(0.81f + 0.035f*(i-start)), p);
+        for (int i=start;i<chat.size();i++) c.drawText(chat.get(i), w/2f, h*(0.875f + 0.035f*(i-start)), p);
         if (pendingStartAt > 0) {
             long left = Math.max(0, (pendingStartAt - System.currentTimeMillis() + 999) / 1000);
             p.setColor(theme().score); p.setTextSize(34); c.drawText("倒计时 " + left, w/2f, h*0.96f, p);
@@ -313,12 +359,17 @@ public class TetrisView extends View implements Runnable {
     private void addBtn(String text, int action, float cx, float cy, float w, float h) { btns.add(new Btn(text, action, new RectF(cx-w/2, cy-h/2, cx+w/2, cy+h/2))); }
 
     private void drawTop(Canvas c) {
-        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(48); p.setColor(theme().text);
-        c.drawText("分", 12, 70, p); p.setColor(theme().score); c.drawText(String.valueOf(score), 66, 70, p);
-        p.setColor(theme().text); c.drawText("级", 190, 70, p); p.setColor(theme().score); c.drawText(String.valueOf(level), 236, 70, p);
-        p.setColor(theme().text); c.drawText("行", 340, 70, p); p.setColor(theme().score); c.drawText(String.valueOf(lines), 386, 70, p);
-        p.setTextSize(32); p.setColor(theme().textMuted);
-        c.drawText((solo ? "单人" : "P2P") + " " + APP_VERSION + " " + theme().name, 12, 108, p);
+        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(56); p.setColor(theme().text);
+        c.drawText("分", 12, 74, p); p.setTextSize(60); p.setColor(theme().score); c.drawText(String.valueOf(score), 72, 74, p);
+        p.setTextSize(56); p.setColor(theme().text); c.drawText("级", 210, 74, p); p.setTextSize(60); p.setColor(theme().score); c.drawText(String.valueOf(level), 264, 74, p);
+        p.setTextSize(56); p.setColor(theme().text); c.drawText("行", 370, 74, p); p.setTextSize(60); p.setColor(theme().score); c.drawText(String.valueOf(lines), 424, 74, p);
+        p.setTextSize(36); p.setColor(theme().textMuted);
+        c.drawText((solo ? "单人" : "P2P") + " " + APP_VERSION + " " + theme().name, 12, 116, p);
+        String timeStr = timeFmt.format(new Date());
+        String battStr = batteryPct >= 0 ? (batteryPct + "%") : "";
+        String rightInfo = timeStr + (battStr.isEmpty() ? "" : "  " + battStr);
+        p.setTextAlign(Paint.Align.RIGHT); p.setTextSize(32); p.setColor(theme().textMuted);
+        c.drawText(rightInfo, getWidth() - 12, 116, p);
     }
 
     private void drawBoard(Canvas c) {
@@ -334,18 +385,18 @@ public class TetrisView extends View implements Runnable {
 
     private void drawSide(Canvas c) {
         float sx = bx + bw + 8;
-        float sideW = Math.max(78, getWidth() - sx - 6);
+        float sideW = Math.max(90, getWidth() - sx - 6);
         float cx = sx + sideW / 2;
-        float box = Math.min(108, sideW);
-        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(28); p.setColor(theme().textMuted);
-        c.drawText("下一个", cx, by+30, p); mini(c, next, cx-box/2, by+44, box);
-        c.drawText("暂存", cx, by+168, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, by+182, box);
-        c.drawText("对手", cx, by+296, p);
-        p.setTextSize(22); c.drawText(solo ? "单人模式" : p2pStatus, cx, by+330, p);
-        if (!solo) c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, by+358, p);
-        p.setColor(theme().score); p.setTextSize(21);
-        c.drawText("连击 " + Math.max(0, combo) + " B2B " + b2b, cx, by+390, p);
-        c.drawText("KO " + kos + " 徽章 " + badges, cx, by+418, p);
+        float box = Math.min(130, sideW);
+        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(36); p.setColor(theme().textMuted);
+        c.drawText("下一个", cx, by+38, p); mini(c, next, cx-box/2, by+56, box);
+        c.drawText("暂存", cx, by+190, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, by+208, box);
+        c.drawText("对手", cx, by+330, p);
+        p.setTextSize(28); c.drawText(solo ? "单人模式" : p2pStatus, cx, by+368, p);
+        if (!solo) c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, by+400, p);
+        p.setColor(theme().score); p.setTextSize(26);
+        c.drawText("连击 " + Math.max(0, combo) + " B2B " + b2b, cx, by+434, p);
+        c.drawText("KO " + kos + " 徽章 " + badges, cx, by+468, p);
     }
 
     private void mini(Canvas c, Piece pc, float x, float y, float box) {
@@ -492,12 +543,21 @@ public class TetrisView extends View implements Runnable {
             if (hit(x,y,w*.14f,h*.73f,w*.86f,h*.82f)) { menuPage=0; return true; }
             return true;
         }
-        if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
-        if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
-        if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { joinFound(); return true; }
-        if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { toggleReady(); return true; }
-        if (hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) { askChat(); return true; }
-        if (hit(x,y,w*.54f,h*.53f,w*.92f,h*.61f)) { stopP2p(); menuPage=0; return true; }
+        if (p2p == null) {
+            if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
+            if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
+            if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { joinFound(); return true; }
+            if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { stopP2p(); menuPage=0; return true; }
+        } else {
+            if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { toggleReady(); return true; }
+            if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askChat(); return true; }
+            if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { leaveRoom(); return true; }
+            if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) {
+                if (isHost) { disbandRoom(); return true; }
+                else { stopP2p(); menuPage=0; return true; }
+            }
+            if (isHost && !peerNames.isEmpty() && hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) { kickPlayer(); return true; }
+        }
         return true;
     }
 
@@ -550,6 +610,31 @@ public class TetrisView extends View implements Runnable {
                 pendingStartSeed = seed; pendingStartAt = startAt; p2pStatus = "3秒后开始";
             }
             @Override public void onGarbage(int rows) { pendingGarbage += rows; garbageDueAt = System.currentTimeMillis() + 1800; p2pStatus = "收到垃圾 " + rows; tone(sGarbage); fx("WARNING +" + rows, true); }
+            @Override public void onLeave(String host, String name) {
+                peerNames.remove(host); readyPeers.remove(host);
+                addChat("系统: " + name + " 离开了房间");
+            }
+            @Override public void onKick(String host, String name, String targetName, String reason) {
+                if (targetName.equals(playerName)) {
+                    stopP2p(); isHost = false;
+                    fx("被踢出", true);
+                    addChat("系统: 你被房主踢出 (" + reason + ")");
+                    return;
+                }
+                for (java.util.Iterator<java.util.Map.Entry<String, String>> it = peerNames.entrySet().iterator(); it.hasNext(); ) {
+                    java.util.Map.Entry<String, String> e = it.next();
+                    if (e.getValue().equals(targetName)) {
+                        it.remove(); readyPeers.remove(e.getKey());
+                        addChat("系统: " + targetName + " 被踢出");
+                        break;
+                    }
+                }
+            }
+            @Override public void onDisband(String host, String name) {
+                stopP2p(); isHost = false;
+                fx("房间已解散", true);
+                addChat("系统: 房主解散了房间");
+            }
             @Override public void onError(String message) { p2pStatus = "P2P错误"; }
         });
         p2p.start();
@@ -570,6 +655,12 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void createRoom() {
+        if (p2p != null) {
+            if (isHost) { if (p2p != null) p2p.sendDisband(); }
+            else { if (p2p != null) p2p.sendLeave(); }
+            stopP2p();
+        }
+        isHost = true;
         roomName = "R" + (1000 + rnd.nextInt(9000));
         restartP2p();
         addChat("系统: 已创建房间 " + roomName);
@@ -578,6 +669,8 @@ public class TetrisView extends View implements Runnable {
     private void askRoom() {
         askText("输入房间号", roomName, text -> {
             roomName = clean(text, "TETRIS");
+            if (p2p != null) { p2p.sendLeave(); stopP2p(); }
+            isHost = false;
             restartP2p();
             addChat("系统: 已进入房间 " + roomName);
         });
@@ -585,6 +678,8 @@ public class TetrisView extends View implements Runnable {
 
     private void joinFound() {
         if ("-".equals(foundRoom)) return;
+        if (p2p != null) { p2p.sendLeave(); stopP2p(); }
+        isHost = false;
         roomName = foundRoom;
         restartP2p();
         addChat("系统: 加入发现房间 " + roomName);
@@ -608,6 +703,45 @@ public class TetrisView extends View implements Runnable {
         String leader = playerName;
         for (String n: peerNames.values()) if (n.compareTo(leader) < 0) leader = n;
         return playerName.equals(leader);
+    }
+
+    private void leaveRoom() {
+        if (p2p != null) p2p.sendLeave();
+        stopP2p();
+        isHost = false;
+        addChat("系统: 已退出房间");
+    }
+
+    private void disbandRoom() {
+        if (!isHost) return;
+        if (p2p != null) p2p.sendDisband();
+        stopP2p();
+        isHost = false;
+        addChat("系统: 房间已解散");
+    }
+
+    private void kickPlayer() {
+        if (!isHost || peerNames.isEmpty()) return;
+        String[] items = new String[peerNames.size()];
+        final String[] hosts = new String[peerNames.size()];
+        int i = 0;
+        for (java.util.Map.Entry<String, String> e : peerNames.entrySet()) {
+            hosts[i] = e.getKey();
+            items[i] = e.getValue() + " (" + e.getKey() + ")";
+            i++;
+        }
+        new AlertDialog.Builder(getContext())
+            .setTitle("选择要踢出的玩家")
+            .setItems(items, (dialog, which) -> {
+                String targetHost = hosts[which];
+                String targetName = peerNames.get(targetHost);
+                if (p2p != null) p2p.sendKick(targetHost, targetName, "被房主踢出");
+                peerNames.remove(targetHost);
+                readyPeers.remove(targetHost);
+                addChat("系统: 已踢出 " + targetName);
+            })
+            .setNegativeButton("取消", null)
+            .show();
     }
 
     private void askChat() {
