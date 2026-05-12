@@ -32,13 +32,14 @@ public class TetrisView extends View implements Runnable {
     private int peerScore = 0, peerLines = 0;
     private int pendingGarbage = 0;
     private long lastP2pSend = 0;
-    private boolean running = true, menu = true, over = true, paused = false;
+    private boolean running = true, menu = true, over = true, paused = false, settings = false;
     private boolean solo = true, canHold = true;
+    private int menuPage = 0; // 0 main, 1 solo actions, 2 multiplayer actions
     private int[][] board = new int[R][C];
     private Piece cur, next;
     private int hold = 0, score = 0, lines = 0, level = 1;
     private long lastDrop = 0, dropMs = 1000, lastSave = 0;
-    private float bx, by, cell, bw, bh;
+    private float bx, by, cell, bw, bh, topBtnY;
 
     private static final int[][][] SHAPES = {
         {},
@@ -74,7 +75,7 @@ public class TetrisView extends View implements Runnable {
     @Override public void run() {
         while (running) {
             long now = System.currentTimeMillis();
-            if (!menu && !over && !paused) {
+            if (!menu && !over && !paused && !settings) {
                 if (now - lastDrop > dropMs) {
                     if (!move(0, 1)) lock();
                     lastDrop = now;
@@ -104,57 +105,72 @@ public class TetrisView extends View implements Runnable {
         drawBoard(c);
         drawSide(c);
         drawBtns(c);
-        if (over) drawCenter(c, "游戏结束", "点开始重开");
+        if (over) drawCenter(c, "游戏结束", "点设置或主界面");
         if (paused && !over) drawCenter(c, "暂停", "点暂停继续");
+        if (settings) drawSettings(c, w, h);
     }
 
     private void drawMenu(Canvas c, int w, int h) {
         p.setTextAlign(Paint.Align.CENTER);
-        p.setColor(Color.WHITE); p.setTextSize(42); c.drawText("Tetris Native", w/2f, h*0.18f, p);
-        drawMenuButton(c, "单人模式", w*0.18f, h*0.28f, w*0.82f, h*0.36f, solo);
-        drawMenuButton(c, "创建/加入房间", w*0.18f, h*0.38f, w*0.82f, h*0.46f, !solo);
-        drawMenuButton(c, "同步开局", w*0.18f, h*0.52f, w*0.82f, h*0.60f, false);
-        drawMenuButton(c, "读取存档", w*0.18f, h*0.62f, w*0.82f, h*0.70f, false);
-        drawMenuButton(c, "手动保存", w*0.18f, h*0.72f, w*0.82f, h*0.80f, false);
-        p.setColor(0xffaaaaaa); p.setTextSize(24);
-        c.drawText(solo ? "单人支持自动/手动保存" : roomName + "/" + roomPass + " " + p2pStatus, w/2f, h*0.87f, p);
+        p.setColor(Color.WHITE); p.setTextSize(44); c.drawText("Tetris Native", w/2f, h*0.16f, p);
+        if (menuPage == 0) {
+            drawMenuButton(c, "单人模式", w*0.14f, h*0.30f, w*0.86f, h*0.39f, false);
+            drawMenuButton(c, "多人模式", w*0.14f, h*0.43f, w*0.86f, h*0.52f, false);
+            p.setColor(0xffaaaaaa); p.setTextSize(24);
+            c.drawText("先选模式，再开局/读取/保存", w/2f, h*0.66f, p);
+            return;
+        }
+        boolean multi = menuPage == 2;
+        p.setColor(0xff00e5ff); p.setTextSize(28); c.drawText(multi ? "多人模式" : "单人模式", w/2f, h*0.25f, p);
+        drawMenuButton(c, multi ? "同步开局" : "开始新局", w*0.14f, h*0.34f, w*0.86f, h*0.43f, false);
+        drawMenuButton(c, "读取存档", w*0.14f, h*0.46f, w*0.86f, h*0.55f, false);
+        drawMenuButton(c, "手动保存", w*0.14f, h*0.58f, w*0.86f, h*0.67f, false);
+        drawMenuButton(c, "返回主菜单", w*0.14f, h*0.73f, w*0.86f, h*0.82f, false);
+        p.setColor(0xffaaaaaa); p.setTextSize(22);
+        c.drawText(multi ? roomName + "/" + roomPass + " " + p2pStatus : "单人支持自动/手动保存", w/2f, h*0.90f, p);
     }
 
     private void drawMenuButton(Canvas c, String text, float l, float t, float r, float b, boolean on) {
         p.setStyle(Paint.Style.FILL); p.setColor(on ? 0xff00e5ff : 0xff1e1e30);
-        c.drawRoundRect(new RectF(l,t,r,b), 18, 18, p);
+        c.drawRoundRect(new RectF(l,t,r,b), 20, 20, p);
         p.setColor(on ? Color.BLACK : Color.WHITE); p.setTextSize(30); p.setTextAlign(Paint.Align.CENTER);
         c.drawText(text, (l+r)/2, (t+b)/2 + 10, p);
     }
 
     private void layoutGame(int w, int h) {
-        float top = 54, bottomControls = h - 150;
-        bw = Math.min(w * 0.68f, (bottomControls - top) * C / (float)R);
+        float top = 46, bottomControls = h - 132;
+        bw = Math.min(w * 0.76f, (bottomControls - top) * C / (float)R);
         bh = bw * R / C;
-        bx = 10; by = top;
+        bx = 8; by = top;
         cell = bw / C;
         btns.clear();
-        float bwBtn = Math.max(82, w * 0.28f), bhBtn = bwBtn * 0.55f, gap = 7;
-        float y2 = h - bhBtn/2 - 10, y1 = y2 - bhBtn - gap;
-        addBtn("旋转", 0, bwBtn/2+8, y1, bwBtn, bhBtn);
+        float topW = Math.max(78, w * 0.18f), topH = 36;
+        topBtnY = 24;
+        addBtn("设置", 8, w - topW * 1.55f, topBtnY, topW, topH);
+        addBtn("主界面", 9, w - topW * 0.52f, topBtnY, topW, topH);
+        float bwBtn = Math.max(88, w * 0.29f), bhBtn = bwBtn * 0.52f, gap = 8;
+        float y2 = h - bhBtn/2 - 8, y1 = y2 - bhBtn - gap;
+        addBtn("旋转", 0, bwBtn/2+6, y1, bwBtn, bhBtn);
         addBtn("速降", 1, w/2f, y1, bwBtn, bhBtn);
-        addBtn("逆旋", 2, w-bwBtn/2-8, y1, bwBtn, bhBtn);
-        addBtn("左移", 3, bwBtn/2+8, y2, bwBtn, bhBtn);
+        addBtn("逆旋", 2, w-bwBtn/2-6, y1, bwBtn, bhBtn);
+        addBtn("左移", 3, bwBtn/2+6, y2, bwBtn, bhBtn);
         addBtn("软降", 4, w/2f, y2, bwBtn, bhBtn);
-        addBtn("右移", 5, w-bwBtn/2-8, y2, bwBtn, bhBtn);
-        float sideX = bx + bw + 10 + (w - (bx + bw + 10))/2;
-        addBtn("暂停", 6, sideX, by + bh - bhBtn*1.7f, bwBtn*.9f, bhBtn);
-        addBtn("暂存", 7, sideX, by + bh - bhBtn*.55f, bwBtn*.9f, bhBtn);
+        addBtn("右移", 5, w-bwBtn/2-6, y2, bwBtn, bhBtn);
+        float sideLeft = bx + bw + 8;
+        float sideW = Math.max(70, w - sideLeft - 6);
+        float sideX = sideLeft + sideW / 2;
+        addBtn("暂停", 6, sideX, by + bh - bhBtn*1.62f, sideW, bhBtn);
+        addBtn("暂存", 7, sideX, by + bh - bhBtn*.52f, sideW, bhBtn);
     }
 
     private void addBtn(String text, int action, float cx, float cy, float w, float h) { btns.add(new Btn(text, action, new RectF(cx-w/2, cy-h/2, cx+w/2, cy+h/2))); }
 
     private void drawTop(Canvas c) {
-        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(26); p.setColor(Color.WHITE);
-        c.drawText("分 ", 10, 35, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(score), 48, 35, p);
-        p.setColor(Color.WHITE); c.drawText("级 ", 145, 35, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(level), 183, 35, p);
-        p.setColor(Color.WHITE); c.drawText("行 ", 245, 35, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(lines), 283, 35, p);
-        p.setColor(0xffaaaaaa); p.setTextSize(20); c.drawText(solo ? "单人" : "P2P", getWidth()-70, 35, p);
+        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(24); p.setColor(Color.WHITE);
+        c.drawText("分 ", 8, 33, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(score), 44, 33, p);
+        p.setColor(Color.WHITE); c.drawText("级 ", 116, 33, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(level), 152, 33, p);
+        p.setColor(Color.WHITE); c.drawText("行 ", 194, 33, p); p.setColor(0xff00e5ff); c.drawText(String.valueOf(lines), 230, 33, p);
+        p.setColor(0xff888899); p.setTextSize(18); c.drawText(solo ? "单人" : "P2P", 276, 33, p);
     }
 
     private void drawBoard(Canvas c) {
@@ -169,30 +185,34 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void drawSide(Canvas c) {
-        float sx = bx + bw + 12;
-        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(20); p.setColor(0xffaaaaaa);
-        c.drawText("下一个", sx+45, by+18, p); mini(c, next, sx, by+28);
-        c.drawText("暂存", sx+45, by+138, p); mini(c, hold==0?null:new Piece(hold), sx, by+148);
-        c.drawText("对手", sx+45, by+258, p);
-        p.setTextSize(17); c.drawText(solo ? "单人模式" : p2pStatus, sx+45, by+292, p);
-        if (!solo) c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, sx+45, by+318, p);
+        float sx = bx + bw + 8;
+        float sideW = Math.max(70, getWidth() - sx - 6);
+        float cx = sx + sideW / 2;
+        float box = Math.min(92, sideW);
+        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(19); p.setColor(0xffaaaaaa);
+        c.drawText("下一个", cx, by+20, p); mini(c, next, cx-box/2, by+30, box);
+        c.drawText("暂存", cx, by+128, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, by+138, box);
+        c.drawText("对手", cx, by+236, p);
+        p.setTextSize(15); c.drawText(solo ? "单人模式" : p2pStatus, cx, by+265, p);
+        if (!solo) c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, by+288, p);
     }
 
-    private void mini(Canvas c, Piece pc, float x, float y) {
-        p.setColor(0xff121220); c.drawRoundRect(new RectF(x,y,x+90,y+90), 8, 8, p);
+    private void mini(Canvas c, Piece pc, float x, float y, float box) {
+        p.setColor(0xff121220); c.drawRoundRect(new RectF(x,y,x+box,y+box), 8, 8, p);
         if (pc == null) return;
-        float z = 20;
+        float z = box / 4.5f;
         for (int r=0;r<pc.s.length;r++) for (int col=0;col<pc.s[r].length;col++) if (pc.s[r][col] != 0) {
-            p.setColor(COLORS[pc.type]); c.drawRect(x+8+col*z, y+8+r*z, x+8+(col+1)*z-2, y+8+(r+1)*z-2, p);
+            p.setColor(COLORS[pc.type]); c.drawRect(x+6+col*z, y+8+r*z, x+6+(col+1)*z-2, y+8+(r+1)*z-2, p);
         }
     }
 
     private void drawBtns(Canvas c) {
-        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(25);
+        p.setTextAlign(Paint.Align.CENTER);
         for (Btn b: btns) {
-            p.setColor(b.action==6 ? 0xffffab40 : 0xcc1e1e30);
+            if (b.action == 8 || b.action == 9) p.setTextSize(18); else p.setTextSize(25);
+            p.setColor(b.action==6 ? 0xffffab40 : (b.action>=8 ? 0xff252542 : 0xcc1e1e30));
             c.drawRoundRect(b.r, 16, 16, p);
-            p.setColor(Color.WHITE); c.drawText(b.text, b.r.centerX(), b.r.centerY()+9, p);
+            p.setColor(Color.WHITE); c.drawText(b.text, b.r.centerX(), b.r.centerY()+(b.action>=8?7:9), p);
         }
     }
 
@@ -200,6 +220,15 @@ public class TetrisView extends View implements Runnable {
         p.setTextAlign(Paint.Align.CENTER); p.setColor(0xdd000000); c.drawRoundRect(new RectF(50,getHeight()/2f-90,getWidth()-50,getHeight()/2f+80),20,20,p);
         p.setColor(Color.WHITE); p.setTextSize(38); c.drawText(a, getWidth()/2f, getHeight()/2f-20, p);
         p.setColor(0xffaaaaaa); p.setTextSize(24); c.drawText(b, getWidth()/2f, getHeight()/2f+28, p);
+    }
+
+    private void drawSettings(Canvas c, int w, int h) {
+        p.setColor(0xee050509); c.drawRect(0, 0, w, h, p);
+        p.setTextAlign(Paint.Align.CENTER); p.setColor(Color.WHITE); p.setTextSize(38); c.drawText("设置", w/2f, h*0.22f, p);
+        drawMenuButton(c, "继续游戏", w*.16f, h*.32f, w*.84f, h*.40f, false);
+        drawMenuButton(c, "读取存档", w*.16f, h*.43f, w*.84f, h*.51f, false);
+        drawMenuButton(c, "手动保存", w*.16f, h*.54f, w*.84f, h*.62f, false);
+        drawMenuButton(c, "返回主界面", w*.16f, h*.68f, w*.84f, h*.76f, false);
     }
 
     private void block(Canvas c, int x, int y, int type, float alpha) {
@@ -214,17 +243,31 @@ public class TetrisView extends View implements Runnable {
         if (e.getAction() != MotionEvent.ACTION_DOWN) return true;
         float x=e.getX(), y=e.getY();
         if (menu) return touchMenu(x,y);
+        if (settings) return touchSettings(x, y);
         for (Btn b: btns) if (b.r.contains(x,y)) { act(b.action); return true; }
         return true;
     }
 
     private boolean touchMenu(float x, float y) {
         int w=getWidth(), h=getHeight();
-        if (hit(x,y,w*.18f,h*.28f,w*.82f,h*.36f)) { solo=true; return true; }
-        if (hit(x,y,w*.18f,h*.38f,w*.82f,h*.46f)) { solo=false; startP2p(); return true; }
-        if (hit(x,y,w*.18f,h*.52f,w*.82f,h*.60f)) { if (solo) start(); else syncStart(); return true; }
-        if (hit(x,y,w*.18f,h*.62f,w*.82f,h*.70f)) { load(); return true; }
-        if (hit(x,y,w*.18f,h*.72f,w*.82f,h*.80f)) { save(true); return true; }
+        if (menuPage == 0) {
+            if (hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { solo=true; menuPage=1; return true; }
+            if (hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { solo=false; menuPage=2; startP2p(); return true; }
+            return true;
+        }
+        if (hit(x,y,w*.14f,h*.34f,w*.86f,h*.43f)) { if (solo) start(); else syncStart(); return true; }
+        if (hit(x,y,w*.14f,h*.46f,w*.86f,h*.55f)) { if (solo) load(); return true; }
+        if (hit(x,y,w*.14f,h*.58f,w*.86f,h*.67f)) { if (solo) save(true); return true; }
+        if (hit(x,y,w*.14f,h*.73f,w*.86f,h*.82f)) { menuPage=0; return true; }
+        return true;
+    }
+
+    private boolean touchSettings(float x, float y) {
+        int w=getWidth(), h=getHeight();
+        if (hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; paused=false; return true; }
+        if (hit(x,y,w*.16f,h*.43f,w*.84f,h*.51f)) { if (solo) load(); settings=false; return true; }
+        if (hit(x,y,w*.16f,h*.54f,w*.84f,h*.62f)) { save(true); return true; }
+        if (hit(x,y,w*.16f,h*.68f,w*.84f,h*.76f)) { goMenu(); return true; }
         return true;
     }
     private boolean hit(float x,float y,float l,float t,float r,float b){return x>=l&&x<=r&&y>=t&&y<=b;}
@@ -261,19 +304,29 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void act(int a) {
+        if (a==8) { settings=true; paused=true; return; }
+        if (a==9) { goMenu(); return; }
         if (a==6) { paused=!paused; return; }
         if (a==7) { hold(); return; }
         if (over) return;
         if (a==0) rotate(true); else if (a==2) rotate(false); else if (a==3) move(-1,0); else if (a==5) move(1,0); else if (a==4) move(0,1); else if (a==1) { while(move(0,1)); lock(); }
     }
 
+    private void goMenu() {
+        if (solo) save(false);
+        menu = true;
+        settings = false;
+        paused = false;
+        menuPage = solo ? 1 : 2;
+    }
+
     private void start() { start(System.currentTimeMillis()); }
-    private void start(long seed) { rnd.setSeed(seed); board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; canHold=true; over=false; paused=false; next=randomPiece(); spawn(); lastDrop=System.currentTimeMillis(); menu=false; }
+    private void start(long seed) { rnd.setSeed(seed); board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; canHold=true; over=false; paused=false; settings=false; next=randomPiece(); spawn(); lastDrop=System.currentTimeMillis(); menu=false; }
     private Piece randomPiece(){ return new Piece(1+rnd.nextInt(7)); }
     private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=3; cur.y=0; canHold=true; if(!ok(cur,0,0,cur.s)) over=true; }
     private boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; cur.x+=dx; cur.y+=dy; return true; }
     private boolean ok(Piece pc,int dx,int dy,int[][] s){ for(int r=0;r<s.length;r++) for(int x=0;x<s[r].length;x++) if(s[r][x]!=0){int xx=pc.x+x+dx, yy=pc.y+r+dy; if(xx<0||xx>=C||yy>=R) return false; if(yy>=0&&board[yy][xx]!=0)return false;} return true; }
-    private void rotate(boolean cw){ int[][] ns=rot(cur.s,cw); int[] kicks={0,-1,1,-2,2}; for(int k:kicks) if(ok(cur,k,0,ns)){cur.s=ns;cur.x+=k;return;} }
+    private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int[] kicks={0,-1,1,-2,2}; for(int k:kicks) if(ok(cur,k,0,ns)){cur.s=ns;cur.x+=k;return;} }
     private int[][] rot(int[][] s, boolean cw){ int n=s.length; int[][] a=new int[n][n]; for(int r=0;r<n;r++) for(int c=0;c<n;c++) if(cw)a[c][n-1-r]=s[r][c]; else a[n-1-c][r]=s[r][c]; return a; }
     private int ghostY(){ int y=cur.y; while(ok(cur,0,y-cur.y+1,cur.s)) y++; return y; }
     private void lock(){ for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy>=0) board[yy][cur.x+x]=cur.type;} clear(); applyGarbage(); spawn(); }
@@ -282,7 +335,7 @@ public class TetrisView extends View implements Runnable {
     private void hold(){ if(!canHold||cur==null||over)return; int t=cur.type; if(hold==0){hold=t; spawn();} else {cur=new Piece(hold); cur.x=3; cur.y=0; hold=t;} canHold=false; }
 
     private void save(boolean toast) { if(!solo||cur==null||over)return; try{ JSONObject o=new JSONObject(); o.put("board", arr(board)); o.put("cur", cur.json()); o.put("next", next.json()); o.put("hold", hold); o.put("score", score); o.put("lines", lines); o.put("level", level); o.put("drop", dropMs); sp.edit().putString("save", o.toString()).apply(); }catch(Exception ignored){} }
-    private void load(){ try{ String s=sp.getString("save", null); if(s==null)return; JSONObject o=new JSONObject(s); board=board(o.getJSONArray("board")); cur=new Piece(o.getJSONObject("cur")); next=new Piece(o.getJSONObject("next")); hold=o.optInt("hold"); score=o.optInt("score"); lines=o.optInt("lines"); level=o.optInt("level",1); dropMs=o.optLong("drop",1000); over=false; paused=false; menu=false; }catch(Exception ignored){} }
+    private void load(){ try{ String s=sp.getString("save", null); if(s==null)return; JSONObject o=new JSONObject(s); board=board(o.getJSONArray("board")); cur=new Piece(o.getJSONObject("cur")); next=new Piece(o.getJSONObject("next")); hold=o.optInt("hold"); score=o.optInt("score"); lines=o.optInt("lines"); level=o.optInt("level",1); dropMs=o.optLong("drop",1000); over=false; paused=false; settings=false; menu=false; }catch(Exception ignored){} }
     private JSONArray arr(int[][] b)throws Exception{ JSONArray a=new JSONArray(); for(int y=0;y<R;y++){JSONArray row=new JSONArray(); for(int x=0;x<C;x++) row.put(b[y][x]); a.put(row);} return a; }
     private int[][] board(JSONArray a)throws Exception{ int[][] b=new int[R][C]; for(int y=0;y<R;y++){JSONArray row=a.getJSONArray(y); for(int x=0;x<C;x++) b[y][x]=row.getInt(x);} return b; }
 
