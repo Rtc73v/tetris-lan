@@ -31,7 +31,7 @@ import java.util.Random;
 
 public class TetrisView extends View implements Runnable {
     private static final int C = 10, R = 20;
-    private static final String APP_VERSION = "v1.6.7";
+    private static final String APP_VERSION = "v1.6.8";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -363,9 +363,9 @@ public class TetrisView extends View implements Runnable {
 
     private void drawTop(Canvas c) {
         p.setTextAlign(Paint.Align.LEFT); p.setTextSize(64); p.setColor(theme().text);
-        c.drawText("分", 12, 80, p); p.setTextSize(68); p.setColor(theme().score); c.drawText(String.valueOf(score), 82, 80, p);
-        p.setTextSize(64); p.setColor(theme().text); c.drawText("级", 230, 80, p); p.setTextSize(68); p.setColor(theme().score); c.drawText(String.valueOf(level), 290, 80, p);
-        p.setTextSize(64); p.setColor(theme().text); c.drawText("行", 420, 80, p); p.setTextSize(68); p.setColor(theme().score); c.drawText(String.valueOf(lines), 480, 80, p);
+        c.drawText("分", 12, 80, p); p.setTextSize(52); p.setColor(theme().score); c.drawText(String.valueOf(score), 72, 80, p);
+        p.setTextSize(40); p.setColor(theme().text); c.drawText("级", 220, 80, p); p.setTextSize(52); p.setColor(theme().score); c.drawText(String.valueOf(level), 270, 80, p);
+        p.setTextSize(40); p.setColor(theme().text); c.drawText("行", 400, 80, p); p.setTextSize(52); p.setColor(theme().score); c.drawText(String.valueOf(lines), 450, 80, p);
     }
 
     private void drawBoard(Canvas c) {
@@ -386,24 +386,37 @@ public class TetrisView extends View implements Runnable {
 
     private void drawSide(Canvas c) {
         float sx = bx + bw + 8;
-        float sideW = Math.max(90, getWidth() - sx - 6);
+        float sideW = Math.max(110, getWidth() - sx - 6);
         float cx = sx + sideW / 2;
-        float box = Math.min(130, sideW);
+        float box = Math.min(160, sideW);
+        float y = by + 36;
         p.setTextAlign(Paint.Align.CENTER); p.setTextSize(42); p.setColor(theme().textMuted);
-        c.drawText("下一个", cx, by+44, p); mini(c, next, cx-box/2, by+64, box);
-        c.drawText("暂存", cx, by+210, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, by+230, box);
-        c.drawText("对手", cx, by+360, p);
-        p.setTextSize(34); c.drawText(solo ? "单人模式" : p2pStatus, cx, by+404, p);
-        if (!solo) c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, by+442, p);
+        c.drawText("下一个", cx, y, p); mini(c, next, cx-box/2, y+16, box);
+        y += 16 + box + 20;
+        c.drawText("暂存", cx, y, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, y+16, box);
+        y += 16 + box + 24;
+        c.drawText("对手", cx, y, p);
+        p.setTextSize(34); c.drawText(solo ? "单人模式" : p2pStatus, cx, y+40, p);
+        if (!solo) { c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, y+78, p); y += 38; }
+        y += 50;
         p.setColor(theme().score); p.setTextSize(32);
-        c.drawText("连击 " + Math.max(0, combo) + " B2B " + b2b, cx, by+482, p);
-        c.drawText("KO " + kos + " 徽章 " + badges, cx, by+520, p);
+        float statLeft = sx + 10;
+        float statRight = sx + sideW - 10;
+        float lineH = 34;
+        p.setTextAlign(Paint.Align.LEFT);  c.drawText("连击", statLeft, y, p);
+        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(Math.max(0, combo)), statRight, y, p); y += lineH;
+        p.setTextAlign(Paint.Align.LEFT);  c.drawText("B2B", statLeft, y, p);
+        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(b2b), statRight, y, p); y += lineH;
+        p.setTextAlign(Paint.Align.LEFT);  c.drawText("KO", statLeft, y, p);
+        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(kos), statRight, y, p); y += lineH;
+        p.setTextAlign(Paint.Align.LEFT);  c.drawText("徽章", statLeft, y, p);
+        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(badges), statRight, y, p);
     }
 
     private void mini(Canvas c, Piece pc, float x, float y, float box) {
         p.setColor(theme().board); c.drawRoundRect(new RectF(x,y,x+box,y+box), 8, 8, p);
         if (pc == null) return;
-        float z = box / 4.5f;
+        float z = box / 3.5f;
         for (int r=0;r<pc.s.length;r++) for (int col=0;col<pc.s[r].length;col++) if (pc.s[r][col] != 0) {
             p.setColor(theme().colors[pc.type]); c.drawRect(x+6+col*z, y+8+r*z, x+6+(col+1)*z-2, y+8+(r+1)*z-2, p);
         }
