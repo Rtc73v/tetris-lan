@@ -7,10 +7,12 @@ import java.io.OutputStreamWriter;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -38,6 +40,7 @@ public class P2pTransport {
     private final String name;
     private final Map<String, Peer> peers = new HashMap<>();
     private final Set<String> connecting = new HashSet<>();
+    private final Set<String> localAddresses = new HashSet<>();
     private volatile boolean running;
     private DatagramSocket udpSocket;
     private ServerSocket tcpServer;
@@ -53,6 +56,18 @@ public class P2pTransport {
         this.pass = safe(pass, "1234");
         this.name = safe(name, "P1");
         this.listener = listener;
+        localAddresses.add("127.0.0.1");
+        localAddresses.add("0.0.0.0");
+        localAddresses.add("::1");
+        try {
+            Enumeration<NetworkInterface> nis = NetworkInterface.getNetworkInterfaces();
+            while (nis.hasMoreElements()) {
+                Enumeration<InetAddress> addrs = nis.nextElement().getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    localAddresses.add(addrs.nextElement().getHostAddress());
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     public void start() {
@@ -174,6 +189,7 @@ public class P2pTransport {
     }
 
     private void handleMessage(String host, String msg, String via) {
+        if (localAddresses.contains(host)) return;
         String[] p = split(msg);
         if (p == null) return;
         if ("HELLO".equals(p[3])) listener.onRoomFound(p[1], host, p[4]);
