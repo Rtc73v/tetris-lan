@@ -50,6 +50,15 @@ ANDROID_HOME=/opt/android-sdk ./gradlew :app:assembleDebug
 
 APK 输出：`app/build/outputs/apk/debug/app-debug.apk`
 
+## 致谢
+
+- **Tetris Guideline**：旋转系统、墙踢规则、垃圾行机制、评分体系均遵循官方 Guideline 标准。
+- **Tetris Battle / Tetris 99**：垃圾行发送与接收机制参考。
+- **Classic Tetris AI**：Bot 评估函数设计参考经典启发式策略。
+- **Kimi K2.6**（Moonshot AI）：项目架构设计、核心算法实现、多人网络同步、Bot AI 逻辑的主要协作者。
+- **DeepSeek V4**：代码审查、性能优化建议、边界 case 分析。
+- 所有 Tetris 开源社区与爱好者，为本项目提供了宝贵的规则参考与测试反馈。
+
 ## 灵感来源
 
 - 旋转系统与墙踢规则参考 Tetris Guideline（SRS）
