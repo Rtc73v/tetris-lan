@@ -25,6 +25,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -33,7 +34,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
     private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_SURVIVAL = 6;
-    private static final String APP_VERSION = "v1.7.2";
+    private static final String APP_VERSION = "v1.7.3";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -46,7 +47,12 @@ public class TetrisView extends View implements Runnable {
     private final String roomPass = "1234";
     private final String playerName = "P" + (100 + rnd.nextInt(900));
     private String roomHost = null;
-    private String foundRoom = "-", foundHost = "-", foundName = "-";
+    private static class DiscoveredRoom {
+        String room, host, name;
+        long lastSeenMs;
+        DiscoveredRoom(String r, String h, String n) { room=r; host=h; name=n; lastSeenMs=System.currentTimeMillis(); }
+    }
+    private final List<DiscoveredRoom> foundRooms = new ArrayList<>();
     private boolean selfReady = false;
     private final Map<String, Boolean> readyPeers = new HashMap<>();
     private final Map<String, String> peerNames = new HashMap<>();
@@ -302,8 +308,7 @@ public class TetrisView extends View implements Runnable {
         if (p2p == null) {
             drawMenuButton(c, "创建房间", w*0.08f, h*0.31f, w*0.46f, h*0.39f, false);
             drawMenuButton(c, "输入房号", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
-            drawMenuButton(c, "加入发现", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
-            drawMenuButton(c, "返回主菜单", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
+            drawMenuButton(c, "返回主菜单", w*0.15f, h*0.42f, w*0.85f, h*0.50f, false);
         } else {
             drawMenuButton(c, selfReady ? "取消准备" : "准备", w*0.08f, h*0.31f, w*0.46f, h*0.39f, selfReady);
             drawMenuButton(c, "聊天", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
@@ -329,7 +334,39 @@ public class TetrisView extends View implements Runnable {
             }
         } else {
             p.setColor(theme().textMuted); p.setTextSize(24);
-            c.drawText("发现 " + foundRoom + " / " + foundName + " " + foundHost, w/2f, h*0.72f, p);
+            c.drawText("玩家: " + playerName, w/2f, h*0.56f, p);
+            int nf = foundRooms.size();
+            p.setColor(theme().textMuted); p.setTextSize(22);
+            if (nf == 0) {
+                c.drawText("正在搜索附近的房间...", w/2f, h*0.60f, p);
+            } else {
+                c.drawText("—— 附近的房间 ——", w/2f, h*0.59f, p);
+                float cardY = h*0.612f, cardH = h*0.058f, cardGap = h*0.008f, cardL = w*0.06f, cardR = w*0.94f;
+                p.setTextAlign(Paint.Align.LEFT);
+                int limit = Math.min(nf, 4);
+                for (int i = 0; i < limit; i++) {
+                    DiscoveredRoom dr = foundRooms.get(i);
+                    float cy = cardY + i * (cardH + cardGap);
+                    p.setColor(theme().btn); p.setStyle(Paint.Style.FILL);
+                    c.drawRoundRect(new RectF(cardL, cy, cardR, cy+cardH), 12, 12, p);
+                    p.setColor(theme().boardStroke); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1);
+                    c.drawRoundRect(new RectF(cardL+1, cy+1, cardR-1, cy+cardH-1), 11, 11, p);
+                    p.setStyle(Paint.Style.FILL);
+                    p.setColor(theme().score);
+                    c.drawRoundRect(new RectF(cardL, cy, cardL+4, cy+cardH), 2, 2, p);
+                    p.setColor(theme().text); p.setTextSize(24);
+                    c.drawText(dr.room, cardL+14, cy+16, p);
+                    p.setColor(theme().textMuted); p.setTextSize(18);
+                    c.drawText("房主: " + dr.name, cardL+14, cy+cardH-8, p);
+                    p.setTextAlign(Paint.Align.CENTER);
+                    p.setColor(theme().score); p.setTextSize(26);
+                    c.drawText("→", cardR-28, cy+cardH/2+9, p);
+                    p.setTextAlign(Paint.Align.LEFT);
+                }
+                p.setTextAlign(Paint.Align.CENTER);
+                p.setColor(theme().textMuted); p.setTextSize(18);
+                c.drawText("发现 " + nf + " 个房间 · 点击房间加入", w/2f, cardY + limit*(cardH+cardGap) + h*0.010f, p);
+            }
         }
         p.setColor(theme().textMuted); p.setTextSize(24);
         c.drawText(p2pStatus, w/2f, h*0.84f, p);
@@ -597,8 +634,19 @@ public class TetrisView extends View implements Runnable {
         if (p2p == null) {
             if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
             if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
-            if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { joinFound(); return true; }
-            if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { stopP2p(); menuPage=0; return true; }
+            if (hit(x,y,w*.15f,h*.42f,w*.85f,h*.50f)) { stopP2p(); menuPage=0; return true; }
+            // 点击发现的房间卡片加入
+            int nf = foundRooms.size();
+            float cardY = h*0.612f, cardH = h*0.058f, cardGap = h*0.008f, cardL = w*0.06f, cardR = w*0.94f;
+            int limit = Math.min(nf, 4);
+            for (int i = 0; i < limit; i++) {
+                float cy = cardY + i * (cardH + cardGap);
+                if (hit(x,y,cardL,cy,cardR,cy+cardH)) {
+                    DiscoveredRoom dr = foundRooms.get(i);
+                    joinRoom(dr.room, dr.host);
+                    return true;
+                }
+            }
         } else {
             if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { toggleReady(); return true; }
             if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askChat(); return true; }
@@ -640,7 +688,20 @@ public class TetrisView extends View implements Runnable {
         p2p = new P2pTransport(roomName, roomPass, playerName, isHost, new P2pTransport.Listener() {
             @Override public void onRoomFound(String room, String host, String name, boolean hostRole) {
                 if (roomName.equals(room) && hostRole && !isHost) roomHost = host;
-                if (!roomName.equals(room) && hostRole) { foundRoom = room; foundHost = host; foundName = name; }
+                if (!roomName.equals(room) && hostRole) {
+                    boolean found = false;
+                    long now = System.currentTimeMillis();
+                    Iterator<DiscoveredRoom> it = foundRooms.iterator();
+                    while (it.hasNext()) {
+                        DiscoveredRoom dr = it.next();
+                        if (now - dr.lastSeenMs > 30000) { it.remove(); continue; }
+                        if (dr.room.equals(room) && dr.host.equals(host)) {
+                            dr.name = name; dr.lastSeenMs = now;
+                            found = true;
+                        }
+                    }
+                    if (!found) foundRooms.add(new DiscoveredRoom(room, host, name));
+                }
             }
             @Override public void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String via) {
                 if (!acceptPeer(host, name)) return;
@@ -741,12 +802,11 @@ public class TetrisView extends View implements Runnable {
         });
     }
 
-    private void joinFound() {
-        if ("-".equals(foundRoom)) return;
+    private void joinRoom(String room, String host) {
         if (p2p != null) { p2p.sendLeave(); stopP2p(); }
         isHost = false;
-        roomName = foundRoom;
-        roomHost = foundHost;
+        roomName = room;
+        roomHost = host;
         restartP2p();
         addChat("系统: 加入发现房间 " + roomName);
     }
@@ -868,7 +928,7 @@ public class TetrisView extends View implements Runnable {
     private void stopP2p() {
         if (p2p != null) { p2p.stop(); p2p = null; }
         p2pStatus = "P2P未启动";
-        selfReady = false; readyPeers.clear(); peerNames.clear(); peerInfos.clear();
+        selfReady = false; readyPeers.clear(); peerNames.clear(); peerInfos.clear(); foundRooms.clear();
         rankingUntil = 0;
     }
 
