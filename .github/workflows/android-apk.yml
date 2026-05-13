@@ -47,10 +47,11 @@ jobs:
       - name: Upload APK to Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.8.1
-          name: Tetris LAN v1.8.1
+          tag_name: v1.8.2
+          name: Tetris LAN v1.8.2
           body: |
             **自动构建版本**
+            - 新增对手迷你棋盘实时同步显示
             - 修复多人模式准备/取消BUG
             - Bot数量放开至房间人数上限
             - 房主外至少1人/Bot即可开局

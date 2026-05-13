@@ -34,7 +34,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
     private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_SURVIVAL = 6;
-    private static final String APP_VERSION = "v1.8.1";
+    private static final String APP_VERSION = "v1.8.2";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -557,6 +557,26 @@ public class TetrisView extends View implements Runnable {
                 String net = (System.currentTimeMillis() - pi.lastUpdateMs) > 2000 ? "!" : "";
                 String status = pi.over ? "KO" : (pi.score + "/" + pi.lines + " L" + pi.level);
                 c.drawText(pi.name + net + " " + status, cx, y, p);
+                // 迷你棋盘
+                if (pi.board != null) {
+                    y += 6;
+                    float miniCell = Math.min(8, (sideW - 20) / 10f);
+                    float miniBoardW = miniCell * 10;
+                    float miniBoardH = miniCell * 20;
+                    float miniX = cx - miniBoardW / 2;
+                    p.setColor(theme().board); c.drawRect(miniX, y, miniX + miniBoardW, y + miniBoardH, p);
+                    for (int r = 0; r < 20; r++) {
+                        for (int col = 0; col < 10; col++) {
+                            int val = pi.board[r][col];
+                            if (val != 0) {
+                                p.setColor(theme().colors[val]);
+                                c.drawRect(miniX + col * miniCell, y + r * miniCell,
+                                           miniX + (col + 1) * miniCell - 1, y + (r + 1) * miniCell - 1, p);
+                            }
+                        }
+                    }
+                    y += miniBoardH;
+                }
             }
             if (peerInfos.isEmpty()) {
                 y += 28;
@@ -831,7 +851,7 @@ public class TetrisView extends View implements Runnable {
                     if (!found) foundRooms.add(new DiscoveredRoom(room, host, name));
                 }
             }
-            @Override public void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String via) {
+            @Override public void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String board, String via) {
                 lastAnyPeerUpdate = System.currentTimeMillis();
                 if (networkFrozen) { networkFrozen = false; paused = false; addChat("系统: 网络恢复，游戏继续"); }
                 if (!acceptPeer(host, name)) return;
@@ -840,6 +860,7 @@ public class TetrisView extends View implements Runnable {
                 pi.name = name; pi.score = score; pi.lines = lines; pi.level = level;
                 pi.over = over; pi.kos = kos; pi.badges = badges;
                 pi.lastUpdateMs = System.currentTimeMillis(); pi.via = via;
+                if (board != null && !board.isEmpty()) pi.board = decodeBoard(board);
                 peerNames.put(host, name);
                 p2pStatus = "已连接 " + playerCount() + "/" + MAX_PLAYERS;
             }
@@ -948,7 +969,7 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void sendP2pState() {
-        p2p.publishState(score, lines, level, over, kos, badges);
+        p2p.publishState(score, lines, level, over, kos, badges, encodeBoard());
     }
 
     private void syncStart() {
@@ -1360,7 +1381,7 @@ public class TetrisView extends View implements Runnable {
         score = 0; lines = 0; level = 1; pendingGarbage = 0;
         combo = -1; b2b = 0; badges = 0; kos = 0;
         clearBots();
-        if (p2p != null) p2p.publishState(0, 0, 1, false, 0, 0);
+        if (p2p != null) p2p.publishState(0, 0, 1, false, 0, 0, encodeBoard());
         if (isHost && p2p != null) p2p.sendReturnLobby();
     }
     private boolean checkModeFinish() {
@@ -1921,6 +1942,26 @@ public class TetrisView extends View implements Runnable {
         }
     }
 
+
+    private String encodeBoard() {
+        StringBuilder sb = new StringBuilder(200);
+        for (int r = 0; r < R; r++) {
+            for (int col = 0; col < C; col++) {
+                int v = board[r][col];
+                sb.append(v == 0 ? '.' : (char)('0' + v));
+            }
+        }
+        return sb.toString();
+    }
+    private static int[][] decodeBoard(String s) {
+        if (s == null || s.length() < 200) return null;
+        int[][] b = new int[20][10];
+        for (int i = 0; i < 200; i++) {
+            char ch = s.charAt(i);
+            b[i / 10][i % 10] = (ch == '.' || ch < '0' || ch > '7') ? 0 : (ch - '0');
+        }
+        return b;
+    }
     private static class PeerInfo {
         String name;
         int score, lines, level, kos, badges;
@@ -1929,6 +1970,7 @@ public class TetrisView extends View implements Runnable {
         String via;
         boolean disconnected = false;
         long disconnectedAt = 0;
+        int[][] board = null;
         PeerInfo(String name) { this.name = name; }
     }
     private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }

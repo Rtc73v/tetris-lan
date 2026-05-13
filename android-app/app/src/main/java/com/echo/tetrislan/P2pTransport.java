@@ -21,7 +21,7 @@ import java.util.Set;
 public class P2pTransport {
     public interface Listener {
         void onRoomFound(String room, String host, String name, boolean hostRole);
-        void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String via);
+        void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String board, String via);
         void onReady(String host, String name, boolean ready);
         void onChat(String host, String name, String text);
         void onStart(String host, long seed, long startAt);
@@ -104,14 +104,14 @@ public class P2pTransport {
 
     public String room() { return room; }
 
-    public void publishState(int score, int lines, int level, boolean over, int kos, int badges) {
+    public void publishState(int score, int lines, int level, boolean over, int kos, int badges, String board) {
         this.score = score;
         this.lines = lines;
         this.level = level;
         this.over = over;
         this.kos = kos;
         this.badges = badges;
-        sendReliable(statePacket());
+        sendReliable(statePacket(board));
     }
 
     public void publishBotState(String botName, int score, int lines, int level, boolean over, int kos, int badges) {
@@ -288,11 +288,15 @@ public class P2pTransport {
         return base("HELLO") + "|0|0|" + (hostRole ? 1 : 0) + "|0|" + playerId;
     }
 
-    private String statePacket() {
-        return base("STATE") + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|" + playerId;
+    private String statePacket(String board) {
+        return base("STATE") + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|" + (board == null ? "" : board) + "|" + playerId;
     }
 
-    private String statePacket(String overrideName) {
+    private String statePacket() {
+        return statePacket("");
+    }
+
+    private String botStatePacket(String overrideName) {
         return base("BOT_STATE", overrideName) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges;
     }
 
@@ -318,7 +322,8 @@ public class P2pTransport {
         boolean over = p.length > 8 && parseInt(p[8]) == 1;
         int kos = p.length > 9 ? parseInt(p[9]) : 0;
         int badges = p.length > 10 ? parseInt(p[10]) : 0;
-        listener.onPeer(host, p[4], parseInt(p[5]), parseInt(p[6]), parseInt(p[7]), over, kos, badges, via);
+        String board = p.length > 11 ? p[11] : "";
+        listener.onPeer(host, p[4], parseInt(p[5]), parseInt(p[6]), parseInt(p[7]), over, kos, badges, board, via);
     }
 
     private void notifyBot(String host, String[] p, String via) {
