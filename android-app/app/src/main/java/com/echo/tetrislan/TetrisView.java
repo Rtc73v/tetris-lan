@@ -32,8 +32,8 @@ import java.util.Random;
 public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
-    private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_BIG = 6, MODE_SURVIVAL = 7;
-    private static final String APP_VERSION = "v1.7.0";
+    private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_SURVIVAL = 6;
+    private static final String APP_VERSION = "v1.7.1";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -270,23 +270,22 @@ public class TetrisView extends View implements Runnable {
             return;
         }
         boolean multi = menuPage == 2;
-        p.setColor(theme().score); p.setTextSize(36); c.drawText(multi ? "多人大厅" : "单人模式", w/2f, h*0.25f, p);
+        p.setColor(theme().score); p.setTextSize(36); c.drawText(multi ? "多人大厅" : "单人模式", w/2f, h*0.20f, p);
         if (!multi) {
-            float btnH = h * 0.065f, gap = h * 0.012f, sy = h * 0.24f;
+            float btnH = h * 0.058f, gap = h * 0.010f, sy = h * 0.28f;
             drawMenuButton(c, "经典模式",   w*0.08f, sy,               w*0.46f, sy+btnH, false);
             drawMenuButton(c, "冲刺40行",   w*0.54f, sy,               w*0.92f, sy+btnH, false);
             drawMenuButton(c, "限时得分",   w*0.08f, sy+btnH+gap,      w*0.46f, sy+2*btnH+gap, false);
             drawMenuButton(c, "马拉松",     w*0.54f, sy+btnH+gap,      w*0.92f, sy+2*btnH+gap, false);
             drawMenuButton(c, "隐形模式",   w*0.08f, sy+2*(btnH+gap),  w*0.46f, sy+3*btnH+2*gap, false);
             drawMenuButton(c, "挖掘挑战",   w*0.54f, sy+2*(btnH+gap),  w*0.92f, sy+3*btnH+2*gap, false);
-            drawMenuButton(c, "大号方块",   w*0.08f, sy+3*(btnH+gap),  w*0.46f, sy+4*btnH+3*gap, false);
-            drawMenuButton(c, "无尽生存",   w*0.54f, sy+3*(btnH+gap),  w*0.92f, sy+4*btnH+3*gap, false);
-            float ay = sy + 4*(btnH+gap) + gap;
-            drawMenuButton(c, "读取存档",   w*0.08f, ay,               w*0.46f, ay+btnH, false);
-            drawMenuButton(c, "手动保存",   w*0.54f, ay,               w*0.92f, ay+btnH, false);
-            float by = ay + btnH + gap*2;
+            drawMenuButton(c, "无尽生存",   w*0.08f, sy+3*(btnH+gap),  w*0.46f, sy+4*btnH+3*gap, false);
+            float by = sy + 4*(btnH+gap) + gap*2;
             drawMenuButton(c, "返回主菜单", w*0.14f, by,               w*0.86f, by+btnH, false);
-            p.setColor(theme().textMuted); p.setTextSize(24); c.drawText("经典可存档，挑战直接开局", w/2f, h*0.96f, p);
+            p.setColor(theme().textMuted); p.setTextSize(20);
+            float descY = by + btnH + h*0.025f;
+            c.drawText("经典:传统玩法可存档  冲刺:竞速40行  限时:2分钟得分  马拉松:150行通关", w/2f, descY, p);
+            c.drawText("隐形:落底后隐形  挖掘:清除垃圾行  生存:速度无限提升", w/2f, descY + h*0.028f, p);
             return;
         }
         if (p2p == null) {
@@ -558,19 +557,15 @@ public class TetrisView extends View implements Runnable {
             return true;
         }
         if (menuPage == 1) {
-            float btnH = h * 0.065f, gap = h * 0.012f, sy = h * 0.24f;
-            if (hit(x,y,w*.08f,sy,w*.46f,sy+btnH)) { startMode(MODE_CLASSIC); return true; }
+            float btnH = h * 0.058f, gap = h * 0.010f, sy = h * 0.28f;
+            if (hit(x,y,w*.08f,sy,w*.46f,sy+btnH)) { askClassic(); return true; }
             if (hit(x,y,w*.54f,sy,w*.92f,sy+btnH)) { startMode(MODE_SPRINT); return true; }
             if (hit(x,y,w*.08f,sy+btnH+gap,w*.46f,sy+2*btnH+gap)) { startMode(MODE_ULTRA); return true; }
             if (hit(x,y,w*.54f,sy+btnH+gap,w*.92f,sy+2*btnH+gap)) { startMode(MODE_MARATHON); return true; }
             if (hit(x,y,w*.08f,sy+2*(btnH+gap),w*.46f,sy+3*btnH+2*gap)) { startMode(MODE_INVISIBLE); return true; }
             if (hit(x,y,w*.54f,sy+2*(btnH+gap),w*.92f,sy+3*btnH+2*gap)) { startMode(MODE_DIG); return true; }
-            if (hit(x,y,w*.08f,sy+3*(btnH+gap),w*.46f,sy+4*btnH+3*gap)) { startMode(MODE_BIG); return true; }
-            if (hit(x,y,w*.54f,sy+3*(btnH+gap),w*.92f,sy+4*btnH+3*gap)) { startMode(MODE_SURVIVAL); return true; }
-            float ay = sy + 4*(btnH+gap) + gap;
-            if (hit(x,y,w*.08f,ay,w*.46f,ay+btnH)) { load(); return true; }
-            if (hit(x,y,w*.54f,ay,w*.92f,ay+btnH)) { save(true); return true; }
-            float by = ay + btnH + gap*2;
+            if (hit(x,y,w*.08f,sy+3*(btnH+gap),w*.46f,sy+4*btnH+3*gap)) { startMode(MODE_SURVIVAL); return true; }
+            float by = sy + 4*(btnH+gap) + gap*2;
             if (hit(x,y,w*.14f,by,w*.86f,by+btnH)) { menuPage=0; return true; }
             return true;
         }
@@ -814,6 +809,17 @@ public class TetrisView extends View implements Runnable {
             .setNegativeButton("取消", null).show();
     }
 
+    private void askClassic() {
+        new AlertDialog.Builder(getContext())
+            .setTitle("经典模式")
+            .setItems(new String[]{"新游戏", "读取存档"}, (dialog, which) -> {
+                if (which == 0) startMode(MODE_CLASSIC);
+                else load();
+            })
+            .setNegativeButton("取消", null)
+            .show();
+    }
+
     private String clean(String s, String fallback) {
         if (s == null) return fallback;
         String v = s.trim().replace("|", "");
@@ -948,7 +954,6 @@ public class TetrisView extends View implements Runnable {
         if (gameMode == MODE_MARATHON) return "马拉松";
         if (gameMode == MODE_INVISIBLE) return "隐形模式";
         if (gameMode == MODE_DIG) return "挖掘挑战";
-        if (gameMode == MODE_BIG) return "大号方块";
         if (gameMode == MODE_SURVIVAL) return "无尽生存";
         return "经典模式";
     }
@@ -960,7 +965,6 @@ public class TetrisView extends View implements Runnable {
         if (gameMode == MODE_MARATHON) return Math.min(lines, 150) + "/150行";
         if (gameMode == MODE_INVISIBLE) return "行 " + lines + " " + formatTime(elapsed);
         if (gameMode == MODE_DIG) return Math.min(lines, digTargetLines) + "/" + digTargetLines + "行 " + formatTime(elapsed);
-        if (gameMode == MODE_BIG) return "行 " + lines + " " + formatTime(elapsed);
         if (gameMode == MODE_SURVIVAL) return "级 " + level + " " + formatTime(elapsed);
         return "时间 " + formatTime(elapsed);
     }
@@ -982,7 +986,7 @@ public class TetrisView extends View implements Runnable {
 
     private void start() { start(System.currentTimeMillis()); }
     private void startMode(int mode) { gameMode = mode; start(); }
-    private void start(long seed) { rnd.setSeed(seed); board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; digTargetLines=0; C=10; R=20; if(gameMode==MODE_BIG){C=5;R=20;} if(gameMode==MODE_DIG){digTargetLines=10; for(int y=R-10;y<R;y++){int hole=rnd.nextInt(C); for(int x=0;x<C;x++)board[y][x]=(x==hole)?0:7;}} if(gameMode==MODE_SURVIVAL){dropMs=800;} if(gameMode==MODE_INVISIBLE){invisible=true;} particles.clear(); next=randomPiece(); if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
+    private void start(long seed) { rnd.setSeed(seed); board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; digTargetLines=0; C=10; R=20; if(gameMode==MODE_DIG){digTargetLines=10; for(int y=R-10;y<R;y++){int hole=rnd.nextInt(C); for(int x=0;x<C;x++)board[y][x]=(x==hole)?0:7;}} if(gameMode==MODE_SURVIVAL){dropMs=800;} if(gameMode==MODE_INVISIBLE){invisible=true;} particles.clear(); next=randomPiece(); if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
     private Piece randomPiece(){ if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
     private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; cur.rot=0; cur.spin=false; onGround=false; canHold=true; if(!ok(cur,0,0,cur.s)) finishGame("游戏结束"); }
