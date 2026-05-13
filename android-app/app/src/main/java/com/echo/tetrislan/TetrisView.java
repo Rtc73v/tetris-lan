@@ -226,7 +226,7 @@ public class TetrisView extends View implements Runnable {
                 pendingStartSeed = 0;
                 start(seed);
             }
-            if (!menu && !over && !paused && !settings) {
+            if (!menu && !over && !paused && (solo ? !settings : true)) {
                 if (gameMode == MODE_ULTRA && modeElapsedMs(now) >= 120000) {
                     if (score < soloStage * 5000) finishGame("时间到 未达标");
                 }
@@ -670,8 +670,10 @@ public class TetrisView extends View implements Runnable {
         p.setTextAlign(Paint.Align.CENTER); p.setColor(theme().text); p.setTextSize(46); c.drawText("设置", w/2f, h*0.18f, p);
         if (solo) {
             drawMenuButton(c, "继续游戏", w*.16f, h*.26f, w*.84f, h*.33f, false);
-            drawMenuButton(c, "读取存档", w*.16f, h*.35f, w*.84f, h*.42f, false);
-            drawMenuButton(c, "手动保存", w*.16f, h*.44f, w*.84f, h*.51f, false);
+            if (gameMode == MODE_CLASSIC) {
+                drawMenuButton(c, "读取存档", w*.16f, h*.35f, w*.84f, h*.42f, false);
+                drawMenuButton(c, "手动保存", w*.16f, h*.44f, w*.84f, h*.51f, false);
+            }
         } else {
             drawMenuButton(c, "继续游戏", w*.16f, h*.32f, w*.84f, h*.40f, false);
         }
@@ -836,8 +838,8 @@ public class TetrisView extends View implements Runnable {
             return true;
         }
         if (solo && hit(x,y,w*.16f,h*.26f,w*.84f,h*.33f)) { settings=false; setPaused(false); return true; }
-        if (solo && hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { if (solo) load(); settings=false; return true; }
-        if (solo && hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { save(true); return true; }
+        if (solo && gameMode == MODE_CLASSIC && hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { load(); settings=false; return true; }
+        if (solo && gameMode == MODE_CLASSIC && hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { save(true); return true; }
         if (!solo && hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; return true; }
         // DAS/ARR/软降 点击
         float rowH = h * 0.068f;
@@ -1271,7 +1273,7 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void act(int a) {
-        if (a==8) { settings=true; setPaused(true); releaseAction(activeAction); return; }
+        if (a==8) { settings=true; if (solo) setPaused(true); releaseAction(activeAction); return; }
         if (a==6) { if (!solo) return; setPaused(!paused); tone(sReady); return; }
         if (a==7) { 
             if (over && !menu) { pendingIHS = !pendingIHS; tone(sReady); return; }
@@ -1301,7 +1303,6 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void goMenu() {
-        if (solo) save(false);
         menu = true;
         settings = false;
         paused = false;
@@ -1502,7 +1503,7 @@ public class TetrisView extends View implements Runnable {
     private void lock(){ boolean lockOut=false; for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy<0) lockOut=true; else board[yy][cur.x+x]=cur.type;} if(lockOut){finishGame("游戏结束");return;} int spinType=checkTSpin(); int n=doClear(spinType); if(checkModeFinish()) return; if(n>0){areUntil=System.currentTimeMillis()+ARE_MS;clearing=true;}else{applyGarbage();spawn();} }
     private int checkTSpin(){ if(cur==null||cur.type!=3||!cur.spin)return 0; int cx=cur.x+1, cy=cur.y+1, n=0; int[][] pts={{cx-1,cy-1},{cx+1,cy-1},{cx-1,cy+1},{cx+1,cy+1}}; for(int[] q:pts){int x=q[0],y=q[1]; if(x<0||x>=C||y>=R||(y>=0&&board[y][x]!=0))n++;} if(n<3)return 0; return n==4?2:1; }
     private int doClear(int spinType){ int n=0; for(int y=R-1;y>=0;y--){ boolean full=true; for(int x=0;x<C;x++) if(board[y][x]==0){full=false;break;} if(full){ lineBurst(y); for(int yy=y;yy>0;yy--) board[yy]=board[yy-1].clone(); board[0]=new int[C]; n++; y++; }} if(n>0){ combo++; boolean difficult=n==4||spinType>=1; if(difficult)b2b++; else b2b=0; int base=new int[]{0,100,300,500,800}[n]; if(spinType==2) base=n==1?800:n==2?1200:1600; else if(spinType==1) base=n==1?200:n==2?400:600; int bonus=combo>0?combo*50:0; score+=(base+bonus)*level; lines+=n; level=lines/10+1; if(gameMode==MODE_SURVIVAL) dropMs=Math.max(40,1000-(level-1)*130); else dropMs=Math.max(80,1000-(level-1)*90); int garbage=garbageFor(n, spinType); if(garbage>0&&pendingGarbage>0){int cancel=Math.min(garbage,pendingGarbage); pendingGarbage-=cancel; garbage-=cancel;} if(!solo&&p2p!=null&&garbage>0)p2p.sendGarbage(garbage); fx((spinType>=1?(spinType==2?"T-SPIN ":"T-SPIN MINI "):(n==4?"TETRIS ":"CLEAR "))+n+(combo>1?" COMBO "+combo:""), difficult||n>=3); tone(difficult?sTetris:sClear); } else { combo=-1; } return n; }
-    private int garbageFor(int n, int spinType){ int g=0; if(spinType==2)g=n==1?2:n==2?4:6; else if(spinType==1)g=n==1?0:n==2?1:2; else if(n==2)g=1; else if(n==3)g=2; else if(n==4)g=4; if(b2b>1&&(spinType>=1||n==4))g++; if(combo>1)g+=(combo<4?1:combo<6?2:3); g += badges/2; return g; }
+    private int garbageFor(int n, int spinType){ int g=0; if(spinType==2)g=n==1?2:n==2?4:6; else if(spinType==1)g=n==1?0:n==2?1:2; else if(n==2)g=1; else if(n==3)g=2; else if(n==4)g=4; if(b2b>1&&(spinType>=1||n==4))g++; if(combo>1)g+=(combo<4?1:combo<6?2:3); g += badges/2; return Math.min(g, 4); }
     private void lineBurst(int row){ for(int i=0;i<18;i++) particles.add(new FxParticle(bx+rnd.nextFloat()*bw, by+(row+.5f)*cell, (rnd.nextFloat()-.5f)*bw*.7f, (rnd.nextFloat()-.5f)*90f, theme().blockFlash, 3+rnd.nextFloat()*5)); }
     private void applyGarbage(){ if(pendingGarbage>0&&garbageDueAt==0)garbageDueAt=System.currentTimeMillis()+1800; if(pendingGarbage<=0||System.currentTimeMillis()<garbageDueAt)return; while(pendingGarbage>0){ for(int y=0;y<R-1;y++) board[y]=board[y+1].clone(); int hole=rnd.nextInt(C); board[R-1]=new int[C]; for(int x=0;x<C;x++) board[R-1][x]=(x==hole)?0:7; pendingGarbage--; } garbageDueAt=0; fx("GARBAGE", true); tone(sGarbage); }
     private void hold(){ if(!canHold||cur==null||over)return; int t=cur.type; if(hold==0){hold=t; spawn();} else {cur=new Piece(hold); cur.x=3; cur.y=0; hold=t;} canHold=false; tone(sReady); }
@@ -1924,8 +1925,8 @@ public class TetrisView extends View implements Runnable {
         return true;
     }
 
-    private boolean botTspin(BotPlayer bot) {
-        if (bot.cur == null || bot.cur.type != 3 || !bot.cur.spin) return false;
+    private int botTspin(BotPlayer bot) {
+        if (bot.cur == null || bot.cur.type != 3 || !bot.cur.spin) return 0;
         int cx = bot.cur.x + 1, cy = bot.cur.y + 1;
         int n = 0;
         int[][] pts = {{cx-1,cy-1},{cx+1,cy-1},{cx-1,cy+1},{cx+1,cy+1}};
@@ -1933,9 +1934,22 @@ public class TetrisView extends View implements Runnable {
             int x = q[0], y = q[1];
             if (x < 0 || x >= 10 || y >= 20 || (y >= 0 && bot.board[y][x] != 0)) n++;
         }
-        return n >= 3;
+        if (n < 3) return 0;
+        return n == 4 ? 2 : 1;
     }
 
+    private int botGarbageFor(BotPlayer bot, int n, int spinType) {
+        int g = 0;
+        if (spinType == 2) g = n == 1 ? 2 : n == 2 ? 4 : 6;
+        else if (spinType == 1) g = n == 1 ? 0 : n == 2 ? 1 : 2;
+        else if (n == 2) g = 1;
+        else if (n == 3) g = 2;
+        else if (n == 4) g = 4;
+        if (bot.b2b > 1 && (spinType >= 1 || n == 4)) g++;
+        if (bot.combo > 1) g += (bot.combo < 4 ? 1 : bot.combo < 6 ? 2 : 3);
+        g += bot.badges / 2;
+        return Math.min(g, 4);
+    }
     private int botDoClear(BotPlayer bot) {
         int n = 0;
         for (int y = 19; y >= 0; y--) {
@@ -1970,19 +1984,26 @@ public class TetrisView extends View implements Runnable {
             bot.cur = null;
             return;
         }
-        boolean spin = botTspin(bot);
+        int spinType = botTspin(bot);
         int cleared = botDoClear(bot);
         if (cleared > 0) {
             bot.combo++;
-            boolean difficult = cleared == 4 || spin;
+            boolean difficult = cleared == 4 || spinType >= 1;
             if (difficult) bot.b2b++;
             else bot.b2b = 0;
             int base = new int[]{0, 100, 300, 500, 800}[cleared];
-            if (spin) base = cleared == 1 ? 800 : cleared == 2 ? 1200 : 1600;
+            if (spinType == 2) base = cleared == 1 ? 800 : cleared == 2 ? 1200 : 1600;
+            else if (spinType == 1) base = cleared == 1 ? 200 : cleared == 2 ? 400 : 600;
             int bonus = bot.combo > 0 ? bot.combo * 50 : 0;
             bot.score += (base + bonus) * bot.level;
             bot.lines += cleared;
             bot.level = 1 + bot.lines / 10;
+            int garbage = botGarbageFor(bot, cleared, spinType);
+            if (garbage > 0 && bot.pendingGarbage > 0) {
+                int cancel = Math.min(garbage, bot.pendingGarbage);
+                bot.pendingGarbage -= cancel; garbage -= cancel;
+            }
+            if (p2p != null && garbage > 0) p2p.sendGarbage(garbage);
         } else {
             bot.combo = -1;
         }
