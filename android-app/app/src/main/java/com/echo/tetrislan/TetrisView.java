@@ -33,7 +33,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
     private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_SURVIVAL = 6;
-    private static final String APP_VERSION = "v1.7.1";
+    private static final String APP_VERSION = "v1.7.2";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -46,19 +46,19 @@ public class TetrisView extends View implements Runnable {
     private final String roomPass = "1234";
     private final String playerName = "P" + (100 + rnd.nextInt(900));
     private String roomHost = null;
-    private String peerHost = null, peerName = "-", peerVia = "-";
     private String foundRoom = "-", foundHost = "-", foundName = "-";
-    private boolean selfReady = false, peerReady = false;
+    private boolean selfReady = false;
     private final Map<String, Boolean> readyPeers = new HashMap<>();
     private final Map<String, String> peerNames = new HashMap<>();
+    private final Map<String, PeerInfo> peerInfos = new HashMap<>();
     private long pendingStartAt = 0, pendingStartSeed = 0;
     private final List<String> chat = new ArrayList<>();
-    private int peerScore = 0, peerLines = 0;
     private int pendingGarbage = 0;
     private int combo = -1, b2b = 0, badges = 0, kos = 0;
     private long garbageDueAt = 0;
     private String fxText = "";
     private long fxUntil = 0, shakeUntil = 0, flashUntil = 0;
+    private long rankingUntil = 0;
     private ToneGenerator toneGen;
     private int sMove, sRotate, sDrop, sClear, sTetris, sGarbage, sReady;
     private long lastP2pSend = 0;
@@ -234,6 +234,13 @@ public class TetrisView extends View implements Runnable {
                     lastP2pSend = now;
                 }
             }
+            if (!menu && !solo && p2p != null && rankingUntil == 0) {
+                checkMultiFinish();
+            }
+            if (rankingUntil > 0 && now >= rankingUntil) {
+                rankingUntil = 0;
+                returnToRoom();
+            }
             postInvalidate();
             try { Thread.sleep(16); } catch (InterruptedException ignored) {}
         }
@@ -270,6 +277,10 @@ public class TetrisView extends View implements Runnable {
             return;
         }
         boolean multi = menuPage == 2;
+        if (multi && p2p == null) {
+            startP2p();
+            if ("P2P未启动".equals(p2pStatus)) p2pStatus = "搜索房间中...";
+        }
         p.setColor(theme().score); p.setTextSize(36); c.drawText(multi ? "多人大厅" : "单人模式", w/2f, h*0.20f, p);
         if (!multi) {
             float btnH = h * 0.058f, gap = h * 0.010f, sy = h * 0.28f;
@@ -402,9 +413,23 @@ public class TetrisView extends View implements Runnable {
         c.drawText("暂存", cx, y, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, y+16, box);
         y += 16 + box + 24;
         c.drawText("对手", cx, y, p);
-        p.setTextSize(34); c.drawText(solo ? modeName() : p2pStatus, cx, y+40, p);
-        if (solo) { p.setTextSize(30); c.drawText(modeProgress(), cx, y+78, p); y += 38; }
-        if (!solo) { c.drawText(peerName + " " + peerScore + "/" + peerLines + " " + peerVia + " G" + pendingGarbage, cx, y+78, p); y += 38; }
+        if (solo) {
+            p.setTextSize(34); c.drawText(modeName(), cx, y+40, p);
+            p.setTextSize(30); c.drawText(modeProgress(), cx, y+78, p); y += 38;
+        } else {
+            p.setTextSize(22); p.setColor(theme().score);
+            for (PeerInfo pi : peerInfos.values()) {
+                y += 28;
+                String net = (System.currentTimeMillis() - pi.lastUpdateMs) > 2000 ? "!" : "";
+                String status = pi.over ? "KO" : (pi.score + "/" + pi.lines + " L" + pi.level);
+                c.drawText(pi.name + net + " " + status, cx, y, p);
+            }
+            if (peerInfos.isEmpty()) {
+                y += 28;
+                c.drawText("等待玩家...", cx, y, p);
+            }
+            p.setColor(theme().textMuted);
+        }
         y += 50;
         p.setColor(theme().score); p.setTextSize(32);
         float statLeft = sx + 10;
@@ -617,18 +642,17 @@ public class TetrisView extends View implements Runnable {
                 if (roomName.equals(room) && hostRole && !isHost) roomHost = host;
                 if (!roomName.equals(room) && hostRole) { foundRoom = room; foundHost = host; foundName = name; }
             }
-            @Override public void onPeer(String host, String name, int score, int lines, String via) {
-                peerHost = host;
-                peerName = name;
-                peerScore = score;
-                peerLines = lines;
-                peerVia = via;
+            @Override public void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String via) {
                 if (!acceptPeer(host, name)) return;
+                PeerInfo pi = peerInfos.get(host);
+                if (pi == null) { pi = new PeerInfo(name); peerInfos.put(host, pi); }
+                pi.name = name; pi.score = score; pi.lines = lines; pi.level = level;
+                pi.over = over; pi.kos = kos; pi.badges = badges;
+                pi.lastUpdateMs = System.currentTimeMillis(); pi.via = via;
                 peerNames.put(host, name);
                 p2pStatus = "已连接 " + playerCount() + "/" + MAX_PLAYERS;
             }
             @Override public void onReady(String host, String name, boolean ready) {
-                peerHost = host; peerName = name; peerReady = ready;
                 if (!acceptPeer(host, name)) return;
                 peerNames.put(host, name); readyPeers.put(host, ready);
                 addChat("系统: " + name + (ready ? " 已准备" : " 取消准备"));
@@ -641,8 +665,9 @@ public class TetrisView extends View implements Runnable {
             }
             @Override public void onGarbage(int rows) { pendingGarbage += rows; garbageDueAt = System.currentTimeMillis() + 1800; p2pStatus = "收到垃圾 " + rows; tone(sGarbage); fx("WARNING +" + rows, true); }
             @Override public void onLeave(String host, String name) {
-                peerNames.remove(host); readyPeers.remove(host);
+                peerNames.remove(host); readyPeers.remove(host); peerInfos.remove(host);
                 addChat("系统: " + name + " 离开了房间");
+                p2pStatus = p2p == null ? "P2P未启动" : "已连接 " + playerCount() + "/" + MAX_PLAYERS;
             }
             @Override public void onKick(String host, String name, String targetName, String reason) {
                 if (!fromRoomHost(host)) return;
@@ -669,7 +694,7 @@ public class TetrisView extends View implements Runnable {
             }
             @Override public void onDisconnect(String host) {
                 String name = peerNames.remove(host);
-                readyPeers.remove(host);
+                readyPeers.remove(host); peerInfos.remove(host);
                 if (name != null) addChat("系统: " + name + " 断开连接");
                 p2pStatus = p2p == null ? "P2P未启动" : "已连接 " + playerCount() + "/" + MAX_PLAYERS;
             }
@@ -679,7 +704,7 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void sendP2pState() {
-        p2p.publishState(score, lines, level, over);
+        p2p.publishState(score, lines, level, over, kos, badges);
     }
 
     private void syncStart() {
@@ -735,7 +760,10 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void maybeCountdown() {
-        if (readyCount() >= 2 && pendingStartAt == 0 && isHost) syncStart();
+        if (!isHost || pendingStartAt > 0) return;
+        int pc = playerCount();
+        int rc = readyCount();
+        if (rc >= pc && pc >= 2) syncStart();
     }
 
     private int playerCount() { return Math.min(MAX_PLAYERS, 1 + peerNames.size()); }
@@ -833,14 +861,15 @@ public class TetrisView extends View implements Runnable {
 
     private void restartP2p() {
         stopP2p();
-        selfReady = false; peerReady = false; readyPeers.clear(); peerNames.clear(); pendingStartAt = 0; pendingStartSeed = 0;
+        selfReady = false; readyPeers.clear(); peerNames.clear(); pendingStartAt = 0; pendingStartSeed = 0;
         startP2p();
     }
 
     private void stopP2p() {
         if (p2p != null) { p2p.stop(); p2p = null; }
         p2pStatus = "P2P未启动";
-        selfReady = false; peerReady = false; readyPeers.clear(); peerNames.clear();
+        selfReady = false; readyPeers.clear(); peerNames.clear(); peerInfos.clear();
+        rankingUntil = 0;
     }
 
     private void pressAction(int a) {
@@ -973,8 +1002,54 @@ public class TetrisView extends View implements Runnable {
         over = true;
         finishText = text;
         releaseAllActions();
+        if (!solo && p2p != null) {
+            sendP2pState();
+        }
     }
 
+    private void checkMultiFinish() {
+        if (solo || p2p == null) return;
+        int alive = over ? 0 : 1;
+        for (PeerInfo pi : peerInfos.values()) if (!pi.over) alive++;
+        if (alive <= 1 && rankingUntil == 0) {
+            if (!over) finishGame("获胜");
+            showRankingAndReturn();
+        }
+    }
+    private void showRankingAndReturn() {
+        long now = System.currentTimeMillis();
+        java.util.List<PeerInfo> all = new java.util.ArrayList<>();
+        if (!over || finishText.contains("获胜")) {
+            PeerInfo self = new PeerInfo(playerName);
+            self.score = score; self.lines = lines; self.kos = kos; self.badges = badges; self.over = over;
+            all.add(self);
+        }
+        for (PeerInfo pi : peerInfos.values()) all.add(pi);
+        all.sort((a,b) -> {
+            if (b.kos != a.kos) return b.kos - a.kos;
+            if (b.badges != a.badges) return b.badges - a.badges;
+            if (b.score != a.score) return b.score - a.score;
+            return b.lines - a.lines;
+        });
+        StringBuilder sb = new StringBuilder("排名 ");
+        for (int i=0;i<all.size();i++) {
+            PeerInfo pi = all.get(i);
+            sb.append("#").append(i+1).append(" ").append(pi.name)
+              .append(" K").append(pi.kos).append(" B").append(pi.badges)
+              .append(" ").append(pi.score).append("/").append(pi.lines);
+            if (i < all.size()-1) sb.append("  ");
+        }
+        finishText = sb.toString();
+        rankingUntil = now + 5000;
+    }
+    private void returnToRoom() {
+        menu = true; menuPage = 2; over = false; paused = false; settings = false;
+        finishText = ""; rankingUntil = 0;
+        selfReady = false; readyPeers.clear(); peerInfos.clear();
+        score = 0; lines = 0; level = 1; pendingGarbage = 0;
+        combo = -1; b2b = 0; badges = 0; kos = 0;
+        if (p2p != null) p2p.publishState(0, 0, 1, false, 0, 0);
+    }
     private boolean checkModeFinish() {
         if (!solo) return false;
         long elapsed = modeElapsedMs(System.currentTimeMillis());
@@ -989,7 +1064,7 @@ public class TetrisView extends View implements Runnable {
     private void start(long seed) { rnd.setSeed(seed); board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; digTargetLines=0; C=10; R=20; if(gameMode==MODE_DIG){digTargetLines=10; for(int y=R-10;y<R;y++){int hole=rnd.nextInt(C); for(int x=0;x<C;x++)board[y][x]=(x==hole)?0:7;}} if(gameMode==MODE_SURVIVAL){dropMs=800;} if(gameMode==MODE_INVISIBLE){invisible=true;} particles.clear(); next=randomPiece(); if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
     private Piece randomPiece(){ if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
-    private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; cur.rot=0; cur.spin=false; onGround=false; canHold=true; if(!ok(cur,0,0,cur.s)) finishGame("游戏结束"); }
+    private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; cur.rot=0; cur.spin=false; onGround=false; canHold=true; if(!ok(cur,0,0,cur.s)){ if(!solo){ finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
     private boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; cur.x+=dx; cur.y+=dy; if(dx!=0){ tone(sMove); if(onGround&&lockResets<MAX_LOCK_RESETS){ lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS; lockResets++; } } return true; }
     private boolean ok(Piece pc,int dx,int dy,int[][] s){ for(int r=0;r<s.length;r++) for(int x=0;x<s[r].length;x++) if(s[r][x]!=0){int xx=pc.x+x+dx, yy=pc.y+r+dy; if(xx<0||xx>=C||yy>=R) return false; if(yy>=0&&board[yy][xx]!=0)return false;} return true; }
     private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int newRot=(cur.rot+(cw?1:3))%4; int idx=cw?cur.rot*2:((cur.rot+3)%4)*2+1; int[][][] table=(cur.type==1)?SRS_I:SRS_JLSTZ; for(int[] k:table[idx]) if(ok(cur,k[0],k[1],ns)){cur.s=ns;cur.x+=k[0];cur.y+=k[1];cur.rot=newRot;cur.spin=true;if(onGround&&lockResets<MAX_LOCK_RESETS){lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS;lockResets++;}tone(sRotate);return;} }
@@ -1013,6 +1088,14 @@ public class TetrisView extends View implements Runnable {
 
     private interface TextDone { void apply(String text); }
     private static class FxParticle { float x,y,vx,vy,size; int color; long born=System.currentTimeMillis(); FxParticle(float x,float y,float vx,float vy,int color,float size){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.color=color;this.size=size;} }
+    private static class PeerInfo {
+        String name;
+        int score, lines, level, kos, badges;
+        boolean over;
+        long lastUpdateMs;
+        String via;
+        PeerInfo(String name) { this.name = name; }
+    }
     private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }
     private static class Piece { int type,x=3,y=0,rot=0; boolean spin=false; int[][] s; Piece(int t){type=t; s=copy(SHAPES[t]); rot=0;} Piece(JSONObject o)throws Exception{type=o.getInt("type");x=o.getInt("x");y=o.getInt("y");rot=o.optInt("rot",0);JSONArray a=o.getJSONArray("s");s=new int[a.length()][a.length()];for(int r=0;r<a.length();r++){JSONArray row=a.getJSONArray(r);for(int c=0;c<row.length();c++)s[r][c]=row.getInt(c);}} JSONObject json()throws Exception{JSONObject o=new JSONObject();o.put("type",type);o.put("x",x);o.put("y",y);o.put("rot",rot);JSONArray a=new JSONArray();for(int[] rr:s){JSONArray row=new JSONArray();for(int v:rr)row.put(v);a.put(row);}o.put("s",a);return o;} static int[][] copy(int[][] m){int[][] n=new int[m.length][m.length];for(int i=0;i<m.length;i++)n[i]=m[i].clone();return n;} }
 }

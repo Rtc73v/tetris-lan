@@ -21,7 +21,7 @@ import java.util.Set;
 public class P2pTransport {
     public interface Listener {
         void onRoomFound(String room, String host, String name, boolean hostRole);
-        void onPeer(String host, String name, int score, int lines, String via);
+        void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String via);
         void onReady(String host, String name, boolean ready);
         void onChat(String host, String name, String text);
         void onStart(String host, long seed, long startAt);
@@ -52,6 +52,8 @@ public class P2pTransport {
     private int lines;
     private int level = 1;
     private boolean over;
+    private int kos;
+    private int badges;
 
     public P2pTransport(String room, String pass, String name, boolean hostRole, Listener listener) {
         this.room = safe(room, "ROOM");
@@ -96,11 +98,13 @@ public class P2pTransport {
 
     public String room() { return room; }
 
-    public void publishState(int score, int lines, int level, boolean over) {
+    public void publishState(int score, int lines, int level, boolean over, int kos, int badges) {
         this.score = score;
         this.lines = lines;
         this.level = level;
         this.over = over;
+        this.kos = kos;
+        this.badges = badges;
         sendReliable(statePacket());
     }
 
@@ -258,7 +262,7 @@ public class P2pTransport {
     }
 
     private String statePacket() {
-        return base("STATE") + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0);
+        return base("STATE") + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges;
     }
 
     private String base(String type) {
@@ -276,7 +280,10 @@ public class P2pTransport {
     }
 
     private void notifyPeer(String host, String[] p, String via) {
-        listener.onPeer(host, p[4], parseInt(p[5]), parseInt(p[6]), via);
+        boolean over = p.length > 8 && parseInt(p[8]) == 1;
+        int kos = p.length > 9 ? parseInt(p[9]) : 0;
+        int badges = p.length > 10 ? parseInt(p[10]) : 0;
+        listener.onPeer(host, p[4], parseInt(p[5]), parseInt(p[6]), parseInt(p[7]), over, kos, badges, via);
     }
 
     private int parseInt(String s) {
