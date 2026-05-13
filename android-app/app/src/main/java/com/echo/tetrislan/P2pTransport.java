@@ -32,7 +32,7 @@ public class P2pTransport {
         void onDisconnect(String host);
         void onSurrender(String host, String name);
         void onReturnLobby(String host, String name);
-        void onBotState(String host, String botName, int score, int lines, int level, boolean over, int kos, int badges);
+        void onBotState(String host, String botName, int score, int lines, int level, boolean over, int kos, int badges, String board);
         void onReconnect(String host, String name);
         void onError(String message);
     }
@@ -114,8 +114,8 @@ public class P2pTransport {
         sendReliable(statePacket(board));
     }
 
-    public void publishBotState(String botName, int score, int lines, int level, boolean over, int kos, int badges) {
-        sendReliable(base("BOT_STATE", botName) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|BOT_" + botName);
+    public void publishBotState(String botName, int score, int lines, int level, boolean over, int kos, int badges, String board) {
+        sendReliable(base("BOT_STATE", botName) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|" + (board == null ? "" : board));
     }
 
     public void sendReady(boolean ready) {
@@ -330,7 +330,8 @@ public class P2pTransport {
         boolean over = p.length > 8 && parseInt(p[8]) == 1;
         int kos = p.length > 9 ? parseInt(p[9]) : 0;
         int badges = p.length > 10 ? parseInt(p[10]) : 0;
-        listener.onBotState(host, p[4], parseInt(p[5]), parseInt(p[6]), parseInt(p[7]), over, kos, badges);
+        String board = p.length > 11 ? p[11] : "";
+        listener.onBotState(host, p[4], parseInt(p[5]), parseInt(p[6]), parseInt(p[7]), over, kos, badges, board);
     }
 
     private int parseInt(String s) {

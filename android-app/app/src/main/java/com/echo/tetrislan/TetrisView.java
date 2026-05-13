@@ -987,11 +987,12 @@ public class TetrisView extends View implements Runnable {
                 if (!fromRoomHost(host)) return;
                 returnToRoom();
             }
-            @Override public void onBotState(String host, String botName, int score, int lines, int level, boolean over, int kos, int badges) {
+            @Override public void onBotState(String host, String botName, int score, int lines, int level, boolean over, int kos, int badges, String board) {
                 PeerInfo pi = peerInfos.get(host);
                 if (pi == null) { pi = new PeerInfo(botName); peerInfos.put(host, pi); }
                 pi.name = botName; pi.score = score; pi.lines = lines; pi.level = level;
                 pi.over = over; pi.kos = kos; pi.badges = badges;
+                if (board != null && !board.isEmpty()) pi.board = decodeBoard(board);
                 pi.lastUpdateMs = System.currentTimeMillis(); pi.via = "bot";
                 peerNames.put(host, botName);
             }
@@ -1996,22 +1997,30 @@ public class TetrisView extends View implements Runnable {
                 bot.over = true;
             }
         }
+        // Sync bot board to peerInfos for local preview
+        PeerInfo pi = peerInfos.get(bot.hostKey);
+        if (pi != null) {
+            int[][] copy = new int[20][10];
+            for (int y = 0; y < 20; y++) System.arraycopy(bot.board[y], 0, copy[y], 0, 10);
+            pi.board = copy;
+        }
     }
 
     private void sendBotStates() {
         if (p2p == null) return;
         for (BotPlayer bot : bots.values()) {
             if (bot.over) continue;
-            p2p.publishBotState(bot.name, bot.score, bot.lines, bot.level, bot.over, bot.kos, bot.badges);
+            p2p.publishBotState(bot.name, bot.score, bot.lines, bot.level, bot.over, bot.kos, bot.badges, encodeBoardStatic(bot.board));
         }
     }
 
 
-    private String encodeBoard() {
+    private String encodeBoard() { return encodeBoardStatic(board); }
+    private static String encodeBoardStatic(int[][] b) {
         StringBuilder sb = new StringBuilder(200);
-        for (int r = 0; r < R; r++) {
-            for (int col = 0; col < C; col++) {
-                int v = board[r][col];
+        for (int r = 0; r < 20; r++) {
+            for (int col = 0; col < 10; col++) {
+                int v = b[r][col];
                 sb.append(v == 0 ? '.' : (char)('0' + v));
             }
         }
