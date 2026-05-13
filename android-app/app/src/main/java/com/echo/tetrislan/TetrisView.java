@@ -34,7 +34,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
     private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_SURVIVAL = 6;
-    private static final String APP_VERSION = "v1.9.0";
+    private static final String APP_VERSION = "v1.9.1";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -274,11 +274,10 @@ public class TetrisView extends View implements Runnable {
                 if (!solo) {
                     tickBots();
                     cleanupDisconnectedPeers(now);
-                    if (!menu && !over && lastAnyPeerUpdate > 0 && !peerNames.isEmpty() && now - lastAnyPeerUpdate > 10000) {
+                    if (!menu && !over && lastAnyPeerUpdate > 0 && !peerNames.isEmpty() && now - lastAnyPeerUpdate > 30000) {
                         if (!networkFrozen) {
                             networkFrozen = true;
-                            paused = true;
-                            addChat("系统: 检测到断线，游戏已暂停");
+                            addChat("系统: 检测到网络不稳定");
                         }
                     }
                     if (reconnectCheckHost != null && now > reconnectCheckUntil) {
@@ -316,7 +315,11 @@ public class TetrisView extends View implements Runnable {
         drawBtns(c);
         drawFxOverlay(c, w, h);
         if (over) {
-            drawCenter(c, finishText.isEmpty() ? "游戏结束" : finishText, "点设置或主界面");
+            if (!solo && rankingUntil > 0 && !rankingLines.isEmpty()) {
+                drawRankingOverlay(c, w, h);
+            } else {
+                drawCenter(c, finishText.isEmpty() ? "游戏结束" : finishText, "点设置或主界面");
+            }
             if (solo && !menu && gameMode != MODE_CLASSIC) {
                 float btnW = Math.max(108, w * 0.31f), bhBtn = btnW * 0.56f;
                 float cy = h/2f + 130;
@@ -634,6 +637,28 @@ public class TetrisView extends View implements Runnable {
             c.drawText(ihsTxt, getWidth()/2f, getHeight()/2f+108, p);
         }
     }
+    private void drawRankingOverlay(Canvas c, int w, int h) {
+        int n = rankingLines.size();
+        if (n == 0) return;
+        float lineH = 44;
+        float pad = 24;
+        float boxH = n * lineH + pad * 2;
+        float top = h * 0.22f;
+        p.setColor(0xdd000000);
+        c.drawRoundRect(new RectF(w * 0.08f, top, w * 0.92f, top + boxH), 24, 24, p);
+        p.setTextAlign(Paint.Align.CENTER);
+        for (int i = 0; i < n; i++) {
+            String txt = rankingLines.get(i);
+            if (i == 0) {
+                p.setColor(0xffffff00); p.setTextSize(40);
+            } else {
+                p.setColor(Color.WHITE); p.setTextSize(32);
+            }
+            c.drawText(txt, w / 2f, top + pad + i * lineH + 28, p);
+        }
+        p.setColor(0xffaaaaaa); p.setTextSize(28);
+        c.drawText("点设置或主界面", w / 2f, top + boxH - 10, p);
+    }
     private void drawParticles(Canvas c) {
         long now = System.currentTimeMillis();
         for (int i=particles.size()-1;i>=0;i--) {
@@ -895,7 +920,7 @@ public class TetrisView extends View implements Runnable {
             }
             @Override public void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String board, String via) {
                 lastAnyPeerUpdate = System.currentTimeMillis();
-                if (networkFrozen) { networkFrozen = false; paused = false; addChat("系统: 网络恢复，游戏继续"); }
+                if (networkFrozen) { networkFrozen = false; addChat("系统: 网络恢复，游戏继续"); }
                 if (!acceptPeer(host, name)) return;
                 PeerInfo pi = peerInfos.get(host);
                 if (pi == null) { pi = new PeerInfo(name); peerInfos.put(host, pi); }
@@ -996,6 +1021,7 @@ public class TetrisView extends View implements Runnable {
                 pi.over = over; pi.kos = kos; pi.badges = badges;
                 if (board != null && !board.isEmpty()) pi.board = decodeBoard(board);
                 pi.lastUpdateMs = System.currentTimeMillis(); pi.via = "bot";
+                lastAnyPeerUpdate = System.currentTimeMillis();
                 peerNames.put(host, botName);
             }
             @Override public void onReconnect(String host, String name) {
@@ -1371,7 +1397,7 @@ public class TetrisView extends View implements Runnable {
         int alive = over ? 0 : 1;
         int playing = over ? 0 : 1;
         for (PeerInfo pi : peerInfos.values()) {
-            if (!pi.over && !pi.disconnected) alive++;
+            if (!pi.over) alive++;
             if (!pi.over) playing++;
         }
         if (alive <= 1 && rankingUntil == 0) {
@@ -1401,14 +1427,13 @@ public class TetrisView extends View implements Runnable {
             }
         }
     }
+    private java.util.List<String> rankingLines = new java.util.ArrayList<>();
     private void showRankingAndReturn() {
         long now = System.currentTimeMillis();
         java.util.List<PeerInfo> all = new java.util.ArrayList<>();
-        if (!over || finishText.contains("获胜")) {
-            PeerInfo self = new PeerInfo(playerName);
-            self.score = score; self.lines = lines; self.kos = kos; self.badges = badges; self.over = over;
-            all.add(self);
-        }
+        PeerInfo self = new PeerInfo(playerName);
+        self.score = score; self.lines = lines; self.kos = kos; self.badges = badges; self.over = over;
+        all.add(self);
         for (PeerInfo pi : peerInfos.values()) all.add(pi);
         all.sort((a,b) -> {
             if (a.over != b.over) return a.over ? 1 : -1;
@@ -1417,20 +1442,19 @@ public class TetrisView extends View implements Runnable {
             if (b.badges != a.badges) return b.badges - a.badges;
             return b.lines - a.lines;
         });
-        StringBuilder sb = new StringBuilder("排名 ");
+        rankingLines.clear();
+        rankingLines.add("对局结束 - 排名");
         for (int i=0;i<all.size();i++) {
             PeerInfo pi = all.get(i);
-            sb.append("#").append(i+1).append(" ").append(pi.name)
-              .append(" K").append(pi.kos).append(" B").append(pi.badges)
-              .append(" ").append(pi.score).append("/").append(pi.lines);
-            if (i < all.size()-1) sb.append("  ");
+            String status = pi.over ? "[KO]" : "";
+            rankingLines.add("#" + (i+1) + " " + pi.name + " " + status + "  " + pi.score + "分  " + pi.lines + "行  K" + pi.kos + " B" + pi.badges);
         }
-        finishText = sb.toString();
+        finishText = "对局结束";
         rankingUntil = now + 5000;
     }
     private void returnToRoom() {
         menu = true; menuPage = 2; over = false; paused = false; settings = false;
-        finishText = ""; rankingUntil = 0;
+        finishText = ""; rankingUntil = 0; rankingLines.clear();
         selfReady = false; readyPeers.clear(); peerInfos.clear();
         score = 0; lines = 0; level = 1; pendingGarbage = 0;
         combo = -1; b2b = 0; badges = 0; kos = 0;
