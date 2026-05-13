@@ -34,7 +34,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
     private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_SURVIVAL = 6;
-    private static final String APP_VERSION = "v1.7.3";
+    private static final String APP_VERSION = "v1.8.1";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -45,7 +45,10 @@ public class TetrisView extends View implements Runnable {
     private String p2pStatus = "P2P未启动";
     private String roomName = "TETRIS";
     private final String roomPass = "1234";
-    private final String playerName = "P" + (100 + rnd.nextInt(900));
+    private String playerName;
+    private String playerId;
+    private String lastRoomName = null;
+    private String lastRoomHost = null;
     private String roomHost = null;
     private static class DiscoveredRoom {
         String room, host, name;
@@ -56,8 +59,10 @@ public class TetrisView extends View implements Runnable {
     private boolean p2pDiscovery = false;
     private boolean selfReady = false;
     private final Map<String, Boolean> readyPeers = new HashMap<>();
-    private final Map<String, String> peerNames = new HashMap<>();
-    private final Map<String, PeerInfo> peerInfos = new HashMap<>();
+    private final Map<String, String> peerNames = new java.util.LinkedHashMap<>();
+    private final Map<String, PeerInfo> peerInfos = new java.util.LinkedHashMap<>();
+    private String reconnectCheckHost = null;
+    private long reconnectCheckUntil = 0;
     private long pendingStartAt = 0, pendingStartSeed = 0;
     private final List<String> chat = new ArrayList<>();
     private int pendingGarbage = 0;
@@ -65,7 +70,12 @@ public class TetrisView extends View implements Runnable {
     private long garbageDueAt = 0;
     private String fxText = "";
     private long fxUntil = 0, shakeUntil = 0, flashUntil = 0;
+    private int soloStage = 1;
     private long rankingUntil = 0;
+    private RectF soloOverRestartBtn = null;
+    private RectF soloOverRetryBtn = null;
+    private long lastAnyPeerUpdate = 0;
+    private boolean networkFrozen = false;
     private ToneGenerator toneGen;
     private int sMove, sRotate, sDrop, sClear, sTetris, sGarbage, sReady;
     private long lastP2pSend = 0;
@@ -160,6 +170,18 @@ public class TetrisView extends View implements Runnable {
     public TetrisView(Context c) {
         super(c);
         sp = c.getSharedPreferences("tetris_native", Context.MODE_PRIVATE);
+        playerId = sp.getString("player_id", null);
+        if (playerId == null) {
+            playerId = "pid" + System.currentTimeMillis() + rnd.nextInt(10000);
+            sp.edit().putString("player_id", playerId).apply();
+        }
+        playerName = sp.getString("player_name", null);
+        if (playerName == null) {
+            playerName = "P" + (100 + rnd.nextInt(900));
+            sp.edit().putString("player_name", playerName).apply();
+        }
+        lastRoomName = sp.getString("last_room_name", null);
+        lastRoomHost = sp.getString("last_room_host", null);
         p.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD));
         initSound();
         setFocusable(true);
@@ -201,8 +223,12 @@ public class TetrisView extends View implements Runnable {
                 start(seed);
             }
             if (!menu && !over && !paused && !settings) {
-                if (gameMode == MODE_ULTRA && modeElapsedMs(now) >= 120000) finishGame("时间到");
-                if (gameMode == MODE_DIG && modeElapsedMs(now) >= 180000) finishGame("时间到");
+                if (gameMode == MODE_ULTRA && modeElapsedMs(now) >= 120000) {
+                    if (score < soloStage * 5000) finishGame("时间到 未达标");
+                }
+                if (gameMode == MODE_DIG && modeElapsedMs(now) >= 180000) {
+                    if (lines < 10 * soloStage) finishGame("时间到 未达标");
+                }
                 if (over) {
                     // Timed modes can finish between piece locks.
                 } else if (areUntil > 0) {
@@ -238,7 +264,24 @@ public class TetrisView extends View implements Runnable {
                 }
                 if (!solo && p2p != null && now - lastP2pSend > 500) {
                     sendP2pState();
+                    sendBotStates();
                     lastP2pSend = now;
+                }
+                if (!solo) {
+                    tickBots();
+                    cleanupDisconnectedPeers(now);
+                    if (!menu && !over && lastAnyPeerUpdate > 0 && !peerNames.isEmpty() && now - lastAnyPeerUpdate > 10000) {
+                        if (!networkFrozen) {
+                            networkFrozen = true;
+                            paused = true;
+                            addChat("系统: 检测到断线，游戏已暂停");
+                        }
+                    }
+                    if (reconnectCheckHost != null && now > reconnectCheckUntil) {
+                        reconnectCheckHost = null; reconnectCheckUntil = 0;
+                        addChat("系统: 目标房间已不在线");
+                        stopP2p(); menuPage = 0;
+                    }
                 }
             }
             if (!menu && !solo && p2p != null && rankingUntil == 0) {
@@ -268,7 +311,28 @@ public class TetrisView extends View implements Runnable {
         drawParticles(c);
         drawBtns(c);
         drawFxOverlay(c, w, h);
-        if (over) drawCenter(c, finishText.isEmpty() ? "游戏结束" : finishText, "点设置或主界面");
+        if (over) {
+            drawCenter(c, finishText.isEmpty() ? "游戏结束" : finishText, "点设置或主界面");
+            if (solo && !menu && gameMode != MODE_CLASSIC) {
+                float btnW = Math.max(108, w * 0.31f), bhBtn = btnW * 0.56f;
+                float cy = h/2f + 130;
+                float gap = 16;
+                float totalW = btnW * 2 + gap;
+                float lx = w/2f - totalW/2;
+                float rx = w/2f + gap/2;
+                soloOverRestartBtn = new RectF(lx, cy - bhBtn/2, lx + btnW, cy + bhBtn/2);
+                soloOverRetryBtn = new RectF(rx, cy - bhBtn/2, rx + btnW, cy + bhBtn/2);
+                p.setColor(theme().btn); p.setStyle(Paint.Style.FILL);
+                c.drawRoundRect(soloOverRestartBtn, 16, 16, p);
+                c.drawRoundRect(soloOverRetryBtn, 16, 16, p);
+                p.setColor(theme().text); p.setTextAlign(Paint.Align.CENTER); p.setTextSize(32);
+                c.drawText("从头再来", soloOverRestartBtn.centerX(), soloOverRestartBtn.centerY() + 12, p);
+                c.drawText("本关重试", soloOverRetryBtn.centerX(), soloOverRetryBtn.centerY() + 12, p);
+            } else {
+                soloOverRestartBtn = null;
+                soloOverRetryBtn = null;
+            }
+        }
         if (paused && !over) drawCenter(c, "暂停", "点暂停继续");
         if (settings) drawSettings(c, w, h);
     }
@@ -310,18 +374,33 @@ public class TetrisView extends View implements Runnable {
         if (p2p == null || p2pDiscovery) {
             drawMenuButton(c, "创建房间", w*0.08f, h*0.31f, w*0.46f, h*0.39f, false);
             drawMenuButton(c, "输入房号", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
-            drawMenuButton(c, "返回主菜单", w*0.15f, h*0.42f, w*0.85f, h*0.50f, false);
-        } else {
-            drawMenuButton(c, selfReady ? "取消准备" : "准备", w*0.08f, h*0.31f, w*0.46f, h*0.39f, selfReady);
-            drawMenuButton(c, "聊天", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
-            drawMenuButton(c, "退出房间", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
-            if (isHost) {
-                drawMenuButton(c, "解散房间", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
+            if (lastRoomName != null) {
+                drawMenuButton(c, "重连上一局", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
+                drawMenuButton(c, "修改名称", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
             } else {
-                drawMenuButton(c, "返回主菜单", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
+                drawMenuButton(c, "修改名称", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
             }
-            if (isHost && !peerNames.isEmpty()) {
-                drawMenuButton(c, "踢人", w*0.08f, h*0.53f, w*0.46f, h*0.61f, false);
+            drawMenuButton(c, "返回主菜单", w*0.15f, h*0.53f, w*0.85f, h*0.61f, false);
+        } else {
+            if (isHost) {
+                boolean canStart = canHostStart();
+                drawMenuButton(c, canStart ? "开始游戏" : "等待准备", w*0.08f, h*0.31f, w*0.46f, h*0.39f, canStart);
+            } else {
+                drawMenuButton(c, selfReady ? "取消准备" : "准备", w*0.08f, h*0.31f, w*0.46f, h*0.39f, selfReady);
+            }
+            drawMenuButton(c, "聊天", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
+            drawMenuButton(c, "修改名称", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
+            drawMenuButton(c, "退出房间", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
+            if (isHost) {
+                int bc = botCount();
+                if (playerCount() < MAX_PLAYERS) {
+                    drawMenuButton(c, "+电脑", w*0.08f, h*0.53f, w*0.46f, h*0.61f, false);
+                }
+                if (bc > 0) {
+                    drawMenuButton(c, "-电脑", w*0.54f, h*0.53f, w*0.92f, h*0.61f, false);
+                } else if (!peerNames.isEmpty()) {
+                    drawMenuButton(c, "踢人", w*0.54f, h*0.53f, w*0.92f, h*0.61f, false);
+                }
             }
         }
         p.setColor(theme().text); p.setTextSize(28);
@@ -331,7 +410,10 @@ public class TetrisView extends View implements Runnable {
             c.drawText("玩家: " + playerName + (isHost ? "[房主]" : ""), w/2f, h*0.72f, p);
             int py = 0;
             for (java.util.Map.Entry<String, String> e : peerNames.entrySet()) {
-                c.drawText(e.getValue() + (readyPeers.getOrDefault(e.getKey(), false) ? " [已准备]" : ""), w/2f, h*(0.755f + 0.035f*py), p);
+                String name = e.getValue();
+                boolean isBot = name.startsWith("BOT_");
+                String tag = isBot ? " [电脑]" : (readyPeers.getOrDefault(e.getKey(), false) ? " [已准备]" : "");
+                c.drawText(name + tag, w/2f, h*(0.755f + 0.035f*py), p);
                 py++;
             }
         } else {
@@ -411,7 +493,9 @@ public class TetrisView extends View implements Runnable {
         float sideLeft = bx + bw + 8;
         float sideW = Math.max(70, w - sideLeft - 6);
         float sideX = sideLeft + sideW / 2;
-        addBtn("暂停", 6, sideX, by + bh - bhBtn*1.62f, sideW, bhBtn);
+        if (solo) {
+            addBtn("暂停", 6, sideX, by + bh - bhBtn*1.62f, sideW, bhBtn);
+        }
         addBtn("暂存", 7, sideX, by + bh - bhBtn*.52f, sideW, bhBtn);
     }
 
@@ -420,6 +504,17 @@ public class TetrisView extends View implements Runnable {
     private void drawTop(Canvas c) {
         p.setTextAlign(Paint.Align.LEFT); p.setTextSize(64); p.setColor(theme().text);
         c.drawText("分", 12, 80, p); p.setTextSize(52); p.setColor(theme().score); c.drawText(String.valueOf(score), 72, 80, p);
+        if (solo && !menu) {
+            p.setTextSize(28); p.setColor(theme().textMuted);
+            String stageInfo = "";
+            if (gameMode == MODE_SPRINT) stageInfo = "S" + soloStage + " 目标" + (40 * soloStage) + "行";
+            else if (gameMode == MODE_ULTRA) stageInfo = "S" + soloStage + " 目标" + (soloStage * 5000) + "分";
+            else if (gameMode == MODE_DIG) stageInfo = "S" + soloStage + " 目标" + (10 * soloStage) + "行";
+            else if (gameMode == MODE_MARATHON) stageInfo = "S" + soloStage + " 目标" + (150 * soloStage) + "行";
+            if (!stageInfo.isEmpty()) {
+                c.drawText(stageInfo, 12, 108, p);
+            }
+        }
         p.setTextSize(40); p.setColor(theme().text); c.drawText("级", 220, 80, p); p.setTextSize(52); p.setColor(theme().score); c.drawText(String.valueOf(level), 270, 80, p);
         p.setTextSize(40); p.setColor(theme().text); c.drawText("行", 400, 80, p); p.setTextSize(52); p.setColor(theme().score); c.drawText(String.valueOf(lines), 450, 80, p);
     }
@@ -590,6 +685,17 @@ public class TetrisView extends View implements Runnable {
             float x=e.getX(idx), y=e.getY(idx);
             if (menu) return touchMenu(x,y);
             if (settings) return touchSettings(x, y);
+            if (over && !menu && solo && gameMode != MODE_CLASSIC) {
+                if (soloOverRestartBtn != null && soloOverRestartBtn.contains(x, y)) {
+                    soloStage = 1;
+                    start();
+                    return true;
+                }
+                if (soloOverRetryBtn != null && soloOverRetryBtn.contains(x, y)) {
+                    start();
+                    return true;
+                }
+            }
             for (Btn b: btns) if (b.r.contains(x,y)) {
                 int pointerId = e.getPointerId(idx);
                 pointerActions.put(pointerId, b.action);
@@ -636,7 +742,14 @@ public class TetrisView extends View implements Runnable {
         if (p2p == null || p2pDiscovery) {
             if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
             if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
-            if (hit(x,y,w*.15f,h*.42f,w*.85f,h*.50f)) { stopP2p(); menuPage=0; return true; }
+            if (lastRoomName != null) {
+                if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { reconnectLastRoom(); return true; }
+                if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { askName(); return true; }
+                if (hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
+            } else {
+                if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
+                if (hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
+            }
             // 点击发现的房间卡片加入
             int nf = foundRooms.size();
             float cardY = h*0.612f, cardH = h*0.058f, cardGap = h*0.008f, cardL = w*0.06f, cardR = w*0.94f;
@@ -650,14 +763,23 @@ public class TetrisView extends View implements Runnable {
                 }
             }
         } else {
-            if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { toggleReady(); return true; }
-            if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askChat(); return true; }
-            if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { leaveRoom(); return true; }
-            if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) {
-                if (isHost) { disbandRoom(); return true; }
-                else { stopP2p(); menuPage=0; return true; }
+            if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) {
+                if (isHost) { if (canHostStart()) hostStartGame(); return true; }
+                else { toggleReady(); return true; }
             }
-            if (isHost && !peerNames.isEmpty() && hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) { kickPlayer(); return true; }
+            if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askChat(); return true; }
+            if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
+            if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { leaveRoom(); return true; }
+            if (isHost) {
+                int bc = botCount();
+                if (hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) {
+                    if (playerCount() < MAX_PLAYERS) { addBot(); return true; }
+                }
+                if (hit(x,y,w*.54f,h*.53f,w*.92f,h*.61f)) {
+                    if (bc > 0) { removeBot(); return true; }
+                    else if (!peerNames.isEmpty()) { kickPlayer(); return true; }
+                }
+            }
         }
         return true;
     }
@@ -687,8 +809,12 @@ public class TetrisView extends View implements Runnable {
     private void startP2p() {
         if (p2p != null) return;
         p2pStatus = "房间广播中";
-        p2p = new P2pTransport(roomName, roomPass, playerName, isHost, new P2pTransport.Listener() {
+        p2p = new P2pTransport(roomName, roomPass, playerName, playerId, isHost, new P2pTransport.Listener() {
             @Override public void onRoomFound(String room, String host, String name, boolean hostRole) {
+                if (reconnectCheckHost != null && reconnectCheckHost.equals(host)) {
+                    reconnectCheckHost = null; reconnectCheckUntil = 0;
+                    addChat("系统: 找到目标房间，正在加入");
+                }
                 if (roomName.equals(room) && hostRole && !isHost) roomHost = host;
                 if (!roomName.equals(room) && hostRole) {
                     boolean found = false;
@@ -706,6 +832,8 @@ public class TetrisView extends View implements Runnable {
                 }
             }
             @Override public void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String via) {
+                lastAnyPeerUpdate = System.currentTimeMillis();
+                if (networkFrozen) { networkFrozen = false; paused = false; addChat("系统: 网络恢复，游戏继续"); }
                 if (!acceptPeer(host, name)) return;
                 PeerInfo pi = peerInfos.get(host);
                 if (pi == null) { pi = new PeerInfo(name); peerInfos.put(host, pi); }
@@ -756,10 +884,63 @@ public class TetrisView extends View implements Runnable {
                 addChat("系统: 房主解散了房间");
             }
             @Override public void onDisconnect(String host) {
-                String name = peerNames.remove(host);
-                readyPeers.remove(host); peerInfos.remove(host);
-                if (name != null) addChat("系统: " + name + " 断开连接");
+                PeerInfo pi = peerInfos.get(host);
+                if (pi != null) {
+                    pi.disconnected = true;
+                    pi.disconnectedAt = System.currentTimeMillis();
+                    addChat("系统: " + pi.name + " 断开连接，30秒内可重连");
+                } else {
+                    String name = peerNames.get(host);
+                    if (name != null) addChat("系统: " + name + " 断开连接");
+                }
+                // 房主断开，选举新房主
+                if (roomHost != null && roomHost.equals(host) && !isHost) {
+                    String newHost = null;
+                    String newHostName = null;
+                    for (java.util.Map.Entry<String, PeerInfo> e : peerInfos.entrySet()) {
+                        if (e.getValue().disconnected) continue;
+                        if (e.getValue().name.startsWith("BOT_")) continue;
+                        newHost = e.getKey();
+                        newHostName = e.getValue().name;
+                        break;
+                    }
+                    if (newHost != null) {
+                        roomHost = newHost;
+                        addChat("系统: 房主已断开，" + newHostName + " 成为新房主");
+                        if (p2p != null && p2p.getLocalAddresses().contains(newHost)) {
+                            isHost = true;
+                            p2p.setHostRole(true);
+                            addChat("系统: 你已成为新房主");
+                        }
+                    }
+                }
                 p2pStatus = p2p == null ? "P2P未启动" : "已连接 " + playerCount() + "/" + MAX_PLAYERS;
+            }
+            @Override public void onSurrender(String host, String name) {
+                PeerInfo pi = peerInfos.get(host);
+                if (pi != null) { pi.over = true; }
+                addChat("系统: " + name + " 认输");
+                checkMultiFinish();
+            }
+            @Override public void onReturnLobby(String host, String name) {
+                if (!fromRoomHost(host)) return;
+                returnToRoom();
+            }
+            @Override public void onBotState(String host, String botName, int score, int lines, int level, boolean over, int kos, int badges) {
+                PeerInfo pi = peerInfos.get(host);
+                if (pi == null) { pi = new PeerInfo(botName); peerInfos.put(host, pi); }
+                pi.name = botName; pi.score = score; pi.lines = lines; pi.level = level;
+                pi.over = over; pi.kos = kos; pi.badges = badges;
+                pi.lastUpdateMs = System.currentTimeMillis(); pi.via = "bot";
+                peerNames.put(host, botName);
+            }
+            @Override public void onReconnect(String host, String name) {
+                PeerInfo pi = peerInfos.get(host);
+                if (pi != null) {
+                    pi.disconnected = false;
+                    pi.disconnectedAt = 0;
+                }
+                addChat("系统: " + name + " 重新连接");
             }
             @Override public void onError(String message) { p2pStatus = "P2P错误"; }
         });
@@ -824,14 +1005,28 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void maybeCountdown() {
-        if (!isHost || pendingStartAt > 0) return;
+        // 房主不再自动开局，只是更新状态
+    }
+    private boolean canHostStart() {
+        if (!isHost || pendingStartAt > 0) return false;
         int pc = playerCount();
-        int rc = readyCount();
-        if (rc >= pc && pc >= 2) syncStart();
+        if (pc < 2) return false;
+        for (java.util.Map.Entry<String, PeerInfo> e : peerInfos.entrySet()) {
+            if (e.getValue().name.startsWith("BOT_")) continue;
+            if (!Boolean.TRUE.equals(readyPeers.get(e.getKey()))) return false;
+        }
+        return true;
     }
 
-    private int playerCount() { return Math.min(MAX_PLAYERS, 1 + peerNames.size()); }
-    private int readyCount() { int n = selfReady ? 1 : 0; for (Boolean r: readyPeers.values()) if (r) n++; return Math.min(MAX_PLAYERS, n); }
+    private int playerCount() {
+        int n = 1;
+        long now = System.currentTimeMillis();
+        for (PeerInfo pi : peerInfos.values()) {
+            if (!pi.disconnected || (now - pi.disconnectedAt < 30000)) n++;
+        }
+        return Math.min(MAX_PLAYERS, n);
+    }
+    private int readyCount() { int n = (!isHost && selfReady) ? 1 : 0; for (Boolean r: readyPeers.values()) if (r) n++; return Math.min(MAX_PLAYERS, n); }
     private boolean isRoomFullForNewPeer(String host) { return !peerNames.containsKey(host) && playerCount() >= MAX_PLAYERS; }
     private boolean fromRoomHost(String host) { return isHost || roomHost == null || roomHost.equals(host); }
     private boolean acceptPeer(String host, String name) {
@@ -842,10 +1037,45 @@ public class TetrisView extends View implements Runnable {
     }
 
     private void leaveRoom() {
+        if (!menu && !over && p2p != null) p2p.sendSurrender();
         if (p2p != null) p2p.sendLeave();
+        saveLastRoom();
         stopP2p();
         isHost = false;
         addChat("系统: 已退出房间");
+    }
+
+    private void saveLastRoom() {
+        if (roomName != null) {
+            sp.edit().putString("last_room_name", roomName).putString("last_room_host", roomHost).apply();
+            lastRoomName = roomName;
+            lastRoomHost = roomHost;
+        }
+    }
+
+    private void reconnectLastRoom() {
+        if (lastRoomName == null) return;
+        roomName = lastRoomName;
+        roomHost = lastRoomHost;
+        if (p2p != null) { p2p.sendLeave(); stopP2p(); }
+        isHost = false;
+        p2pDiscovery = false;
+        restartP2p();
+        reconnectCheckHost = lastRoomHost;
+        reconnectCheckUntil = System.currentTimeMillis() + 5000;
+        addChat("系统: 尝试重连 " + roomName + "，检测中...");
+    }
+
+    private void askName() {
+        askText("修改名称", playerName, text -> {
+            String v = clean(text, playerName);
+            if (v.length() > 8) v = v.substring(0, 8);
+            if (!v.isEmpty() && !v.equals(playerName)) {
+                playerName = v;
+                sp.edit().putString("player_name", playerName).apply();
+                addChat("系统: 名称已改为 " + playerName);
+            }
+        });
     }
 
     private void disbandRoom() {
@@ -934,6 +1164,7 @@ public class TetrisView extends View implements Runnable {
         p2pStatus = "P2P未启动";
         selfReady = false; readyPeers.clear(); peerNames.clear(); peerInfos.clear(); foundRooms.clear(); p2pDiscovery = false;
         rankingUntil = 0;
+        bots.clear(); nextBotId = 1;
     }
 
     private void pressAction(int a) {
@@ -979,7 +1210,7 @@ public class TetrisView extends View implements Runnable {
 
     private void act(int a) {
         if (a==8) { settings=true; setPaused(true); releaseAction(activeAction); return; }
-        if (a==6) { setPaused(!paused); tone(sReady); return; }
+        if (a==6) { if (!solo) return; setPaused(!paused); tone(sReady); return; }
         if (a==7) { 
             if (over && !menu) { pendingIHS = !pendingIHS; tone(sReady); return; }
             hold(); return; 
@@ -1074,10 +1305,25 @@ public class TetrisView extends View implements Runnable {
     private void checkMultiFinish() {
         if (solo || p2p == null) return;
         int alive = over ? 0 : 1;
-        for (PeerInfo pi : peerInfos.values()) if (!pi.over) alive++;
+        for (PeerInfo pi : peerInfos.values()) if (!pi.over && !pi.disconnected) alive++;
         if (alive <= 1 && rankingUntil == 0) {
             if (!over) finishGame("获胜");
             showRankingAndReturn();
+        }
+    }
+
+    private void cleanupDisconnectedPeers(long now) {
+        java.util.Iterator<java.util.Map.Entry<String, PeerInfo>> it = peerInfos.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<String, PeerInfo> e = it.next();
+            PeerInfo pi = e.getValue();
+            if (pi.disconnected && now - pi.disconnectedAt > 30000) {
+                String name = pi.name;
+                it.remove();
+                peerNames.remove(e.getKey());
+                readyPeers.remove(e.getKey());
+                addChat("系统: " + name + " 超时未重连，已移除");
+            }
         }
     }
     private void showRankingAndReturn() {
@@ -1090,9 +1336,10 @@ public class TetrisView extends View implements Runnable {
         }
         for (PeerInfo pi : peerInfos.values()) all.add(pi);
         all.sort((a,b) -> {
+            if (a.over != b.over) return a.over ? 1 : -1;
+            if (b.score != a.score) return b.score - a.score;
             if (b.kos != a.kos) return b.kos - a.kos;
             if (b.badges != a.badges) return b.badges - a.badges;
-            if (b.score != a.score) return b.score - a.score;
             return b.lines - a.lines;
         });
         StringBuilder sb = new StringBuilder("排名 ");
@@ -1112,20 +1359,64 @@ public class TetrisView extends View implements Runnable {
         selfReady = false; readyPeers.clear(); peerInfos.clear();
         score = 0; lines = 0; level = 1; pendingGarbage = 0;
         combo = -1; b2b = 0; badges = 0; kos = 0;
+        clearBots();
         if (p2p != null) p2p.publishState(0, 0, 1, false, 0, 0);
+        if (isHost && p2p != null) p2p.sendReturnLobby();
     }
     private boolean checkModeFinish() {
         if (!solo) return false;
-        long elapsed = modeElapsedMs(System.currentTimeMillis());
-        if (gameMode == MODE_SPRINT && lines >= 40) { finishGame("冲刺完成 " + formatTime(elapsed)); return true; }
-        if (gameMode == MODE_MARATHON && lines >= 150) { finishGame("马拉松完成"); return true; }
-        if (gameMode == MODE_DIG && lines >= digTargetLines) { finishGame("清除完成 " + formatTime(elapsed)); return true; }
+        if (gameMode == MODE_SPRINT && lines >= 40 * soloStage) { advanceStage(); return true; }
+        if (gameMode == MODE_MARATHON && lines >= 150 * soloStage) { advanceStage(); return true; }
+        if (gameMode == MODE_DIG && lines >= 10 * soloStage) { advanceStage(); return true; }
+        if (gameMode == MODE_ULTRA && score >= soloStage * 5000) { advanceStage(); return true; }
         return false;
     }
 
+    private void advanceStage() {
+        soloStage++;
+        fx("STAGE " + soloStage, true);
+        tone(sReady);
+        board = new int[R][C];
+        hold = 0;
+        pendingGarbage = 0;
+        combo = -1;
+        b2b = 0;
+        garbageDueAt = 0;
+        areUntil = 0;
+        clearing = false;
+        onGround = false;
+        lockUntil = 0;
+        lockResets = 0;
+        bagIndex = 7;
+        canHold = true;
+        particles.clear();
+        modeStartAt = System.currentTimeMillis();
+        if (gameMode == MODE_DIG) {
+            int target = Math.min(20, 10 * soloStage);
+            digTargetLines = target;
+            for (int y = R - target; y < R; y++) {
+                int hole = rnd.nextInt(C);
+                for (int x = 0; x < C; x++) board[y][x] = (x == hole) ? 0 : 7;
+            }
+        }
+        next = randomPiece();
+        if (pendingIRS != 0) {
+            next.s = rot(next.s, pendingIRS > 0);
+            next.rot = (pendingIRS > 0) ? 1 : 3;
+            pendingIRS = 0;
+        }
+        spawn();
+        if (pendingIHS) {
+            pendingIHS = false;
+            hold();
+        }
+        lastDrop = System.currentTimeMillis();
+    }
+
     private void start() { start(System.currentTimeMillis()); }
-    private void startMode(int mode) { gameMode = mode; start(); }
-    private void start(long seed) { rnd.setSeed(seed); board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; digTargetLines=0; C=10; R=20; if(gameMode==MODE_DIG){digTargetLines=10; for(int y=R-10;y<R;y++){int hole=rnd.nextInt(C); for(int x=0;x<C;x++)board[y][x]=(x==hole)?0:7;}} if(gameMode==MODE_SURVIVAL){dropMs=800;} if(gameMode==MODE_INVISIBLE){invisible=true;} particles.clear(); next=randomPiece(); if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
+    private void startMode(int mode) { gameMode = mode; soloStage = 1; start(); }
+    private void start(long seed) { if (!solo) seed = seed ^ playerName.hashCode() ^ playerId.hashCode(); rnd.setSeed(seed); board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; digTargetLines=0; C=10; R=20; if(gameMode==MODE_DIG){digTargetLines=10; for(int y=R-10;y<R;y++){int hole=rnd.nextInt(C); for(int x=0;x<C;x++)board[y][x]=(x==hole)?0:7;}} if(gameMode==MODE_SURVIVAL){dropMs=800;} if(gameMode==MODE_INVISIBLE){invisible=true;} particles.clear(); next=randomPiece(); if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} if (!solo) { for (BotPlayer bot : bots.values()) { bot.rnd = new Random(seed ^ bot.name.hashCode()); bot.board = new int[20][10]; bot.score = 0; bot.lines = 0; bot.level = 1; bot.over = false; bot.dropDelay = 600; bot.actionSpeed = 3; bot.iq = 5; bot.pendingGarbage = 0; bot.combo = -1; bot.b2b = 0; bot.badges = 0; bot.kos = 0; bot.garbageDueAt = 0; bot.canHold = true; bot.bagIndex = 7; bot.fillBag(); bot.next = bot.randomPiece(); bot.cur = bot.randomPiece(); bot.cur.x = (10 - bot.cur.s[0].length) / 2; bot.cur.y = 0; bot.cur.rot = 0; bot.lastTick = 0; bot.thinkUntil = 0; } }
+        lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
     private Piece randomPiece(){ if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
     private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; cur.rot=0; cur.spin=false; onGround=false; canHold=true; if(!ok(cur,0,0,cur.s)){ if(!solo){ finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
@@ -1152,12 +1443,492 @@ public class TetrisView extends View implements Runnable {
 
     private interface TextDone { void apply(String text); }
     private static class FxParticle { float x,y,vx,vy,size; int color; long born=System.currentTimeMillis(); FxParticle(float x,float y,float vx,float vy,int color,float size){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.color=color;this.size=size;} }
+    private static class BotPlayer {
+        String name;
+        String hostKey;
+        int[][] board = new int[20][10];
+        Piece cur;
+        Piece next;
+        int hold = 0;
+        int score = 0, lines = 0, level = 1;
+        boolean over = false;
+        long thinkUntil = 0;
+        int dropDelay = 600;
+        int actionSpeed = 3; // 1-10, higher = faster
+        int iq = 5; // 1-10
+        long lastTick = 0;
+        int pendingGarbage = 0;
+        int combo = -1, b2b = 0, badges = 0, kos = 0;
+        long garbageDueAt = 0;
+        boolean canHold = true;
+        int bagIndex = 7;
+        int[] bag = new int[7];
+        Random rnd;
+        BotPlayer(String name, String hostKey, long seed) {
+            this.name = name; this.hostKey = hostKey;
+            this.rnd = new Random(seed ^ name.hashCode());
+            fillBag();
+        }
+        void fillBag() {
+            for (int i = 0; i < 7; i++) bag[i] = i + 1;
+            for (int i = 6; i > 0; i--) {
+                int j = rnd.nextInt(i + 1);
+                int t = bag[i]; bag[i] = bag[j]; bag[j] = t;
+            }
+            bagIndex = 0;
+        }
+        Piece randomPiece() {
+            if (bagIndex >= 7) fillBag();
+            return new Piece(bag[bagIndex++]);
+        }
+    }
+
+    private final java.util.Map<String, BotPlayer> bots = new java.util.HashMap<>();
+    private int nextBotId = 1;
+
+    private int botCount() { return bots.size(); }
+    private int realPlayerCount() {
+        int n = 1; // self
+        for (PeerInfo pi : peerInfos.values()) {
+            if (!pi.name.startsWith("BOT_")) n++;
+        }
+        return n;
+    }
+
+    private void hostStartGame() {
+        if (!canHostStart()) return;
+        syncStart();
+    }
+
+    private void addBot() {
+        if (!isHost) return;
+        if (playerCount() >= MAX_PLAYERS) return;
+        String bname = "BOT_" + nextBotId++;
+        String bhost = "bot_" + bname;
+        long seed = System.currentTimeMillis();
+        BotPlayer bot = new BotPlayer(bname, bhost, seed);
+        bot.next = bot.randomPiece();
+        bot.cur = bot.randomPiece();
+        bot.cur.x = (10 - bot.cur.s[0].length) / 2;
+        bot.cur.y = 0;
+        bots.put(bhost, bot);
+        PeerInfo pi = new PeerInfo(bname);
+        pi.name = bname;
+        peerInfos.put(bhost, pi);
+        peerNames.put(bhost, bname);
+        addChat("系统: " + bname + " 加入游戲");
+    }
+
+    private void removeBot() {
+        if (!isHost || bots.isEmpty()) return;
+        String key = bots.keySet().iterator().next();
+        BotPlayer bot = bots.remove(key);
+        peerInfos.remove(key);
+        peerNames.remove(key);
+        readyPeers.remove(key);
+        addChat("系统: " + (bot != null ? bot.name : "电脑") + " 离开游戲");
+    }
+
+    private void clearBots() {
+        bots.clear();
+    }
+
+    private void tickBots() {
+        if (solo || bots.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        for (BotPlayer bot : bots.values()) {
+            if (bot.over) continue;
+            if (now < bot.thinkUntil) continue;
+            // Dynamic difficulty: scale with real players' avg level
+            int avgLevel = bot.level;
+            int realCount = 0;
+            int totalLevel = bot.level;
+            for (PeerInfo pi : peerInfos.values()) {
+                if (!pi.name.startsWith("BOT_")) {
+                    totalLevel += pi.level;
+                    realCount++;
+                }
+            }
+            if (realCount > 0) avgLevel = totalLevel / (realCount + 1);
+            bot.iq = Math.min(10, Math.max(3, avgLevel + 2));
+            bot.actionSpeed = Math.min(10, Math.max(2, avgLevel));
+            bot.dropDelay = Math.max(150, 1000 - bot.level * 80);
+
+            // Bot AI tick
+            botTick(bot);
+        }
+    }
+
+    private void botTick(BotPlayer bot) {
+        long now = System.currentTimeMillis();
+        if (bot.lastTick == 0) bot.lastTick = now;
+        long elapsed = now - bot.lastTick;
+        bot.lastTick = now;
+
+        // Handle pending garbage
+        if (bot.pendingGarbage > 0 && now >= bot.garbageDueAt) {
+            int rows = bot.pendingGarbage;
+            bot.pendingGarbage = 0;
+            for (int r = 0; r < rows; r++) {
+                for (int y = 0; y < 19; y++) {
+                    System.arraycopy(bot.board[y + 1], 0, bot.board[y], 0, 10);
+                }
+                int hole = bot.rnd.nextInt(10);
+                for (int x = 0; x < 10; x++) bot.board[19][x] = (x == hole) ? 0 : 7;
+            }
+        }
+
+        // Simple gravity
+        if (bot.cur != null) {
+            if (elapsed >= bot.dropDelay) {
+                if (botCanMove(bot, 0, 1)) {
+                    bot.cur.y++;
+                } else {
+                    botLock(bot);
+                }
+            }
+        }
+
+        // AI decision making
+        if (bot.cur != null && bot.thinkUntil <= now) {
+            BotDecision bestCur = evaluateBest(bot);
+            BotDecision bestHold = null;
+            if (bot.hold != 0 && bot.canHold && bestCur != null) {
+                int savedType = bot.cur.type;
+                bot.cur = new Piece(bot.hold);
+                bot.cur.x = (10 - bot.cur.s[0].length) / 2;
+                bot.cur.y = 0;
+                bot.cur.rot = 0;
+                int savedHold = bot.hold;
+                bot.hold = savedType;
+                bestHold = evaluateBest(bot);
+                int t = bot.cur.type;
+                bot.cur = new Piece(savedHold);
+                bot.cur.x = (10 - bot.cur.s[0].length) / 2;
+                bot.cur.y = 0;
+                bot.cur.rot = 0;
+                bot.hold = t;
+            }
+            BotDecision best = bestCur;
+            if (bestHold != null && bestHold.score > bestCur.score) {
+                int t = bot.cur.type;
+                bot.cur = new Piece(bot.hold);
+                bot.cur.x = (10 - bot.cur.s[0].length) / 2;
+                bot.cur.y = 0;
+                bot.cur.rot = 0;
+                bot.hold = t;
+                bot.canHold = false;
+                best = bestHold;
+            }
+            if (best != null) {
+                int savedType = bot.cur.type;
+                bot.cur = new Piece(savedType);
+                bot.cur.x = (10 - bot.cur.s[0].length) / 2;
+                bot.cur.y = 0;
+                bot.cur.rot = 0;
+                int moves = 0;
+                while (bot.cur.rot != best.rot && moves < 4) {
+                    if (!botRotateSRS(bot, true)) break;
+                    moves++;
+                }
+                while (bot.cur.x < best.x && moves < 20) {
+                    if (botCanMove(bot, 1, 0)) bot.cur.x++;
+                    else break;
+                    moves++;
+                }
+                while (bot.cur.x > best.x && moves < 20) {
+                    if (botCanMove(bot, -1, 0)) bot.cur.x--;
+                    else break;
+                    moves++;
+                }
+                if (bot.cur.rot == best.rot && bot.cur.x == best.x && best.hardDrop) {
+                    while (botCanMove(bot, 0, 1)) bot.cur.y++;
+                    botLock(bot);
+                }
+            }
+            bot.thinkUntil = now + Math.max(50, 500 - bot.actionSpeed * 40);
+        }
+    }
+
+    private static class BotDecision {
+        int x, rot;
+        boolean hardDrop;
+        double score = 0;
+        BotDecision(int x, int rot, boolean hardDrop) { this.x = x; this.rot = rot; this.hardDrop = hardDrop; }
+    }
+
+    private BotDecision evaluateBest(BotPlayer bot) {
+        if (bot.cur == null) return null;
+        BotDecision best = null;
+        double bestScore = -1e9;
+        int originalX = bot.cur.x;
+        int originalY = bot.cur.y;
+        int originalRot = bot.cur.rot;
+        int[][] originalS = bot.cur.s;
+
+        for (int targetRot = 0; targetRot < 4; targetRot++) {
+            bot.cur.x = originalX;
+            bot.cur.y = originalY;
+            bot.cur.rot = originalRot;
+            bot.cur.s = originalS;
+            int diff = (targetRot - originalRot + 4) % 4;
+            boolean rotOk = true;
+            for (int i = 0; i < diff; i++) {
+                if (!botRotateSRS(bot, true)) { rotOk = false; break; }
+            }
+            if (!rotOk) continue;
+            int minX = -3, maxX = 10;
+            for (int tx = minX; tx <= maxX; tx++) {
+                bot.cur.x = tx;
+                bot.cur.y = originalY;
+                if (!botCanMove(bot, 0, 0)) continue;
+                while (botCanMove(bot, 0, 1)) bot.cur.y++;
+                double s = evaluateBoard(bot);
+                if (s > bestScore) {
+                    bestScore = s;
+                    best = new BotDecision(tx, bot.cur.rot, true);
+                    best.score = s;
+                }
+            }
+        }
+
+        bot.cur.x = originalX;
+        bot.cur.y = originalY;
+        bot.cur.rot = originalRot;
+        bot.cur.s = originalS;
+        return best;
+    }
+
+    private double evaluateBoard(BotPlayer bot) {
+        int[][] sim = new int[20][10];
+        for (int y = 0; y < 20; y++) System.arraycopy(bot.board[y], 0, sim[y], 0, 10);
+        Piece pc = bot.cur;
+        int[][] s = pc.s;
+        for (int r = 0; r < s.length; r++) {
+            for (int c = 0; c < s[r].length; c++) {
+                if (s[r][c] != 0) {
+                    int yy = pc.y + r;
+                    int xx = pc.x + c;
+                    if (yy >= 0 && yy < 20 && xx >= 0 && xx < 10) sim[yy][xx] = pc.type;
+                }
+            }
+        }
+        int cleared = 0;
+        for (int y = 19; y >= 0; y--) {
+            boolean full = true;
+            for (int x = 0; x < 10; x++) if (sim[y][x] == 0) { full = false; break; }
+            if (full) {
+                cleared++;
+                for (int yy = y; yy > 0; yy--) System.arraycopy(sim[yy - 1], 0, sim[yy], 0, 10);
+                for (int x = 0; x < 10; x++) sim[0][x] = 0;
+                y++;
+            }
+        }
+        double score = 0;
+        int aggregateHeight = 0;
+        int holes = 0;
+        int bumpiness = 0;
+        int[] heights = new int[10];
+        for (int x = 0; x < 10; x++) {
+            for (int y = 0; y < 20; y++) {
+                if (sim[y][x] != 0) { heights[x] = 20 - y; break; }
+            }
+            aggregateHeight += heights[x];
+            boolean blockFound = false;
+            for (int y = 0; y < 20; y++) {
+                if (sim[y][x] != 0) blockFound = true;
+                else if (blockFound) holes++;
+            }
+        }
+        for (int x = 0; x < 9; x++) bumpiness += Math.abs(heights[x] - heights[x + 1]);
+        int rowTransitions = 0;
+        for (int y = 0; y < 20; y++) {
+            for (int x = 0; x < 9; x++) {
+                boolean a = sim[y][x] != 0;
+                boolean b = sim[y][x+1] != 0;
+                if (a != b) rowTransitions++;
+            }
+        }
+        int wellDepth = 0;
+        for (int x = 0; x < 10; x++) {
+            int depth = 0;
+            for (int y = 0; y < 20; y++) {
+                if (sim[y][x] != 0) break;
+                boolean leftBlocked = (x == 0) || (sim[y][x-1] != 0);
+                boolean rightBlocked = (x == 9) || (sim[y][x+1] != 0);
+                if (leftBlocked && rightBlocked) depth++;
+                else break;
+            }
+            wellDepth += depth * depth;
+        }
+        double iqFactor = bot.iq / 5.0;
+        score -= aggregateHeight * 0.51 * iqFactor;
+        score -= holes * 0.76 * iqFactor;
+        score -= bumpiness * 0.18 * iqFactor;
+        score -= rowTransitions * 0.15 * iqFactor;
+        score += wellDepth * 0.05 * iqFactor;
+        score += cleared * cleared * 12 * iqFactor;
+        if (cleared >= 4) score += 60 * iqFactor;
+        if (pc.type == 3 && pc.rot != 0) score += 25 * iqFactor;
+        return score;
+    }
+
+    private boolean botCanMove(BotPlayer bot, int dx, int dy) {
+        if (bot.cur == null) return false;
+        int[][] s = bot.cur.s;
+        for (int r = 0; r < s.length; r++) {
+            for (int c = 0; c < s[r].length; c++) {
+                if (s[r][c] != 0) {
+                    int xx = bot.cur.x + c + dx;
+                    int yy = bot.cur.y + r + dy;
+                    if (xx < 0 || xx >= 10 || yy >= 20) return false;
+                    if (yy >= 0 && bot.board[yy][xx] != 0) return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private void botRotate(BotPlayer bot, boolean cw) {
+        if (bot.cur == null) return;
+        int n = bot.cur.s.length;
+        int[][] a = new int[n][n];
+        for (int r = 0; r < n; r++) {
+            for (int c = 0; c < n; c++) {
+                if (cw) a[c][n - 1 - r] = bot.cur.s[r][c];
+                else a[n - 1 - c][r] = bot.cur.s[r][c];
+            }
+        }
+        if (botOk(bot, 0, 0, a)) {
+            bot.cur.s = a;
+            bot.cur.rot = (bot.cur.rot + (cw ? 1 : 3)) % 4;
+        }
+    }
+
+    private boolean botRotateSRS(BotPlayer bot, boolean cw) {
+        if (bot.cur == null) return false;
+        int[][] ns = rot(bot.cur.s, cw);
+        int newRot = (bot.cur.rot + (cw ? 1 : 3)) % 4;
+        int idx = cw ? bot.cur.rot * 2 : ((bot.cur.rot + 3) % 4) * 2 + 1;
+        int[][][] table = (bot.cur.type == 1) ? SRS_I : SRS_JLSTZ;
+        for (int[] k : table[idx]) {
+            if (botOk(bot, k[0], k[1], ns)) {
+                bot.cur.s = ns;
+                bot.cur.x += k[0];
+                bot.cur.y += k[1];
+                bot.cur.rot = newRot;
+                bot.cur.spin = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean botOk(BotPlayer bot, int dx, int dy, int[][] s) {
+        for (int r = 0; r < s.length; r++) {
+            for (int c = 0; c < s[r].length; c++) {
+                if (s[r][c] != 0) {
+                    int xx = bot.cur.x + c + dx;
+                    int yy = bot.cur.y + r + dy;
+                    if (xx < 0 || xx >= 10 || yy >= 20) return false;
+                    if (yy >= 0 && bot.board[yy][xx] != 0) return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean botTspin(BotPlayer bot) {
+        if (bot.cur == null || bot.cur.type != 3 || !bot.cur.spin) return false;
+        int cx = bot.cur.x + 1, cy = bot.cur.y + 1;
+        int n = 0;
+        int[][] pts = {{cx-1,cy-1},{cx+1,cy-1},{cx-1,cy+1},{cx+1,cy+1}};
+        for (int[] q : pts) {
+            int x = q[0], y = q[1];
+            if (x < 0 || x >= 10 || y >= 20 || (y >= 0 && bot.board[y][x] != 0)) n++;
+        }
+        return n >= 3;
+    }
+
+    private int botDoClear(BotPlayer bot) {
+        int n = 0;
+        for (int y = 19; y >= 0; y--) {
+            boolean full = true;
+            for (int x = 0; x < 10; x++) if (bot.board[y][x] == 0) { full = false; break; }
+            if (full) {
+                n++;
+                for (int yy = y; yy > 0; yy--) System.arraycopy(bot.board[yy - 1], 0, bot.board[yy], 0, 10);
+                for (int x = 0; x < 10; x++) bot.board[0][x] = 0;
+                y++;
+            }
+        }
+        return n;
+    }
+
+    private void botLock(BotPlayer bot) {
+        if (bot.cur == null) return;
+        int[][] s = bot.cur.s;
+        boolean lockOut = false;
+        for (int r = 0; r < s.length; r++) {
+            for (int c = 0; c < s[r].length; c++) {
+                if (s[r][c] != 0) {
+                    int yy = bot.cur.y + r;
+                    int xx = bot.cur.x + c;
+                    if (yy < 0) lockOut = true;
+                    else if (yy < 20 && xx >= 0 && xx < 10) bot.board[yy][xx] = bot.cur.type;
+                }
+            }
+        }
+        if (lockOut) {
+            bot.over = true;
+            bot.cur = null;
+            return;
+        }
+        boolean spin = botTspin(bot);
+        int cleared = botDoClear(bot);
+        if (cleared > 0) {
+            bot.combo++;
+            boolean difficult = cleared == 4 || spin;
+            if (difficult) bot.b2b++;
+            else bot.b2b = 0;
+            int base = new int[]{0, 100, 300, 500, 800}[cleared];
+            if (spin) base = cleared == 1 ? 800 : cleared == 2 ? 1200 : 1600;
+            int bonus = bot.combo > 0 ? bot.combo * 50 : 0;
+            bot.score += (base + bonus) * bot.level;
+            bot.lines += cleared;
+            bot.level = 1 + bot.lines / 10;
+        } else {
+            bot.combo = -1;
+        }
+        bot.canHold = true;
+        bot.cur = bot.next;
+        bot.next = bot.randomPiece();
+        if (bot.cur != null) {
+            bot.cur.x = (10 - bot.cur.s[0].length) / 2;
+            bot.cur.y = 0;
+            bot.cur.rot = 0;
+            if (!botCanMove(bot, 0, 0)) {
+                bot.over = true;
+            }
+        }
+    }
+
+    private void sendBotStates() {
+        if (p2p == null) return;
+        for (BotPlayer bot : bots.values()) {
+            if (bot.over) continue;
+            p2p.publishBotState(bot.name, bot.score, bot.lines, bot.level, bot.over, bot.kos, bot.badges);
+        }
+    }
+
     private static class PeerInfo {
         String name;
         int score, lines, level, kos, badges;
         boolean over;
         long lastUpdateMs;
         String via;
+        boolean disconnected = false;
+        long disconnectedAt = 0;
         PeerInfo(String name) { this.name = name; }
     }
     private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }

@@ -5,7 +5,7 @@ android {
     compileSdk 35
     signingConfigs {
         fixed {
-            storeFile file(System.getProperty('user.home') + '/.android/tetris.keystore')
+            storeFile file('tetris.keystore')
             storePassword 'android'
             keyAlias 'tetris'
             keyPassword 'android'
@@ -15,8 +15,8 @@ android {
         applicationId 'com.echo.tetrislan'
         minSdk 23
         targetSdk 35
-        versionCode 19
-        versionName '1.7.3'
+        versionCode 21
+        versionName '1.8.1'
     }
     buildTypes {
         debug {

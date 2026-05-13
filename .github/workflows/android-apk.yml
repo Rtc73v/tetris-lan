@@ -25,22 +25,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Cache keystore
-        uses: actions/cache@v4
-        id: cache-keystore
-        with:
-          path: ~/.android/tetris.keystore
-          key: tetris-keystore-v2
-
-      - name: Generate keystore
-        if: steps.cache-keystore.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/.android
-          keytool -genkey -v -keystore ~/.android/tetris.keystore -alias tetris \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=ECHO, OU=Tetris, O=LAN, L=Local, ST=State, C=CN"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -60,8 +44,21 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat build.log
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Upload APK to Releases
+        uses: softprops/action-gh-release@v2
         with:
-          name: tetris-debug-apk
-          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v1.8.1
+          name: Tetris LAN v1.8.1
+          body: |
+            **自动构建版本**
+            - 修复多人模式准备/取消BUG
+            - Bot数量放开至房间人数上限
+            - 房主外至少1人/Bot即可开局
+            - Bot无需准备，自动参战
+            - 重连上一局时检测房间是否在线
+            - 房主断线后按加入顺序自动选举新房主
+            - 房间名随机生成，不与玩家绑定
+          files: android-app/app/build/outputs/apk/debug/app-debug.apk
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
