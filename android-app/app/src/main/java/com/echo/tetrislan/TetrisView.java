@@ -34,7 +34,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
     private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_SURVIVAL = 6;
-    private static final String APP_VERSION = "v1.8.2";
+    private static final String APP_VERSION = "v1.9.0";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
@@ -91,7 +91,8 @@ public class TetrisView extends View implements Runnable {
     private Piece cur, next;
     private int hold = 0, score = 0, lines = 0, level = 1;
     private long lastDrop = 0, dropMs = 1000, lastSave = 0;
-    private static final long DAS_MS = 167, ARR_MS = 33, SOFT_MS = 120, HARD_COOLDOWN_MS = 350;
+    private long dasMs = 167, arrMs = 33, softMs = 120;
+    private static final long HARD_COOLDOWN_MS = 350;
     private static final long LOCK_DELAY_MS = 500, ARE_MS = 400;
     private static final int MAX_LOCK_RESETS = 15;
     private boolean leftHeld = false, rightHeld = false, softHeld = false, hardReady = true;
@@ -182,6 +183,9 @@ public class TetrisView extends View implements Runnable {
         }
         lastRoomName = sp.getString("last_room_name", null);
         lastRoomHost = sp.getString("last_room_host", null);
+        dasMs = sp.getLong("das_ms", 167);
+        arrMs = sp.getLong("arr_ms", 33);
+        softMs = sp.getLong("soft_ms", 120);
         p.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD));
         initSound();
         setFocusable(true);
@@ -663,11 +667,27 @@ public class TetrisView extends View implements Runnable {
 
     private void drawSettings(Canvas c, int w, int h) {
         p.setColor(theme().bg); c.drawRect(0, 0, w, h, p);
-        p.setTextAlign(Paint.Align.CENTER); p.setColor(theme().text); p.setTextSize(46); c.drawText("设置", w/2f, h*0.22f, p);
-        drawMenuButton(c, "继续游戏", w*.16f, h*.32f, w*.84f, h*.40f, false);
-        drawMenuButton(c, "读取存档", w*.16f, h*.43f, w*.84f, h*.51f, false);
-        drawMenuButton(c, "手动保存", w*.16f, h*.54f, w*.84f, h*.62f, false);
-        drawMenuButton(c, "返回主界面", w*.16f, h*.68f, w*.84f, h*.76f, false);
+        p.setTextAlign(Paint.Align.CENTER); p.setColor(theme().text); p.setTextSize(46); c.drawText("设置", w/2f, h*0.18f, p);
+        if (solo) {
+            drawMenuButton(c, "继续游戏", w*.16f, h*.26f, w*.84f, h*.33f, false);
+            drawMenuButton(c, "读取存档", w*.16f, h*.35f, w*.84f, h*.42f, false);
+            drawMenuButton(c, "手动保存", w*.16f, h*.44f, w*.84f, h*.51f, false);
+        } else {
+            drawMenuButton(c, "继续游戏", w*.16f, h*.32f, w*.84f, h*.40f, false);
+        }
+        // DAS/ARR/软降调节
+        float rowH = h * 0.068f;
+        float sy = h * 0.55f;
+        float btnW = w * 0.12f;
+        String[][] cfg = {{"DAS", String.valueOf(dasMs)}, {"ARR", String.valueOf(arrMs)}, {"软降", String.valueOf(softMs)}};
+        for (int i = 0; i < 3; i++) {
+            float y = sy + i * rowH;
+            p.setTextAlign(Paint.Align.LEFT); p.setColor(theme().textMuted); p.setTextSize(26);
+            c.drawText(cfg[i][0] + " " + cfg[i][1] + "ms", w*0.18f, y + rowH*0.6f, p);
+            drawMenuButton(c, "-", w*0.60f, y, w*0.60f+btnW, y+rowH*0.85f, false);
+            drawMenuButton(c, "+", w*0.74f, y, w*0.74f+btnW, y+rowH*0.85f, false);
+        }
+        drawMenuButton(c, "返回主界面", w*.16f, h*.82f, w*.84f, h*.89f, false);
         if (confirmQuit) {
             p.setColor(0x88000000); c.drawRect(0, 0, w, h, p);
             float dw=w*.78f, dh=h*.30f, dx=(w-dw)/2, dy=(h-dh)/2;
@@ -681,10 +701,10 @@ public class TetrisView extends View implements Runnable {
             c.drawText("保存游戏", w/2f, dy+dh*.28f, p);
             p.setColor(theme().textMuted); p.setTextSize(30);
             c.drawText("是否保存当前游戏进度？", w/2f, dy+dh*.54f, p);
-            float btnW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.76f, gap=dw*.05f;
-            drawMenuButton(c, "保存", w/2f-btnW*1.5f-gap, btnY, w/2f-btnW*.5f-gap, btnY+btnH, false);
-            drawMenuButton(c, "不保存", w/2f-btnW/2f, btnY, w/2f+btnW/2f, btnY+btnH, false);
-            drawMenuButton(c, "取消", w/2f+btnW*.5f+gap, btnY, w/2f+btnW*1.5f+gap, btnY+btnH, false);
+            float qbW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.76f, gap=dw*.05f;
+            drawMenuButton(c, "保存", w/2f-qbW*1.5f-gap, btnY, w/2f-qbW*.5f-gap, btnY+btnH, false);
+            drawMenuButton(c, "不保存", w/2f-qbW/2f, btnY, w/2f+qbW/2f, btnY+btnH, false);
+            drawMenuButton(c, "取消", w/2f+qbW*.5f+gap, btnY, w/2f+qbW*1.5f+gap, btnY+btnH, false);
         }
     }
 
@@ -815,10 +835,30 @@ public class TetrisView extends View implements Runnable {
             if (hit(x,y,bx3,btnY,bx3+btnW,btnY+btnH)) { confirmQuit=false; return true; }
             return true;
         }
-        if (hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; setPaused(false); return true; }
-        if (hit(x,y,w*.16f,h*.43f,w*.84f,h*.51f)) { if (solo) load(); settings=false; return true; }
-        if (hit(x,y,w*.16f,h*.54f,w*.84f,h*.62f)) { save(true); return true; }
-        if (hit(x,y,w*.16f,h*.68f,w*.84f,h*.76f)) {
+        if (solo && hit(x,y,w*.16f,h*.26f,w*.84f,h*.33f)) { settings=false; setPaused(false); return true; }
+        if (solo && hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { if (solo) load(); settings=false; return true; }
+        if (solo && hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { save(true); return true; }
+        if (!solo && hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; return true; }
+        // DAS/ARR/软降 点击
+        float rowH = h * 0.068f;
+        float sy = h * 0.55f;
+        float btnW = w * 0.12f;
+        for (int i = 0; i < 3; i++) {
+            float rowY = sy + i * rowH;
+            if (hit(x,y,w*.60f,rowY,w*.60f+btnW,rowY+rowH*0.85f)) {
+                if (i==0) { dasMs = Math.max(0, dasMs - 17); sp.edit().putLong("das_ms", dasMs).apply(); }
+                else if (i==1) { arrMs = Math.max(0, arrMs - 5); sp.edit().putLong("arr_ms", arrMs).apply(); }
+                else { softMs = Math.max(20, softMs - 20); sp.edit().putLong("soft_ms", softMs).apply(); }
+                return true;
+            }
+            if (hit(x,y,w*.74f,rowY,w*.74f+btnW,rowY+rowH*0.85f)) {
+                if (i==0) { dasMs = Math.min(500, dasMs + 17); sp.edit().putLong("das_ms", dasMs).apply(); }
+                else if (i==1) { arrMs = Math.min(200, arrMs + 5); sp.edit().putLong("arr_ms", arrMs).apply(); }
+                else { softMs = Math.min(500, softMs + 20); sp.edit().putLong("soft_ms", softMs).apply(); }
+                return true;
+            }
+        }
+        if (hit(x,y,w*.16f,h*.82f,w*.84f,h*.89f)) {
             if (!over && !menu) { confirmQuit = true; return true; }
             goMenu(); return true;
         }
@@ -1218,15 +1258,15 @@ public class TetrisView extends View implements Runnable {
         else if (rightHeld && !leftHeld) repeatHorizontal(1, now, rightStart);
         if (softHeld) {
             long held = now - softStart;
-            long interval = Math.max(14, SOFT_MS - held / 12);
+            long interval = Math.max(14, softMs - held / 12);
             if (now - softAt > interval) { if (move(0,1)) score++; softAt = now; }
         }
     }
 
     private void repeatHorizontal(int dir, long now, long startedAt) {
-        if (now - startedAt <= DAS_MS) return;
-        if (ARR_MS == 0) { while(move(dir,0)); return; }
-        if (now - arrAt > ARR_MS) { move(dir,0); arrAt = now; }
+        if (now - startedAt <= dasMs) return;
+        if (arrMs == 0) { while(move(dir,0)); return; }
+        if (now - arrAt > arrMs) { move(dir,0); arrAt = now; }
     }
 
     private void act(int a) {
@@ -1272,6 +1312,7 @@ public class TetrisView extends View implements Runnable {
 
     private void setPaused(boolean value) {
         if (paused == value) return;
+        if (!solo && value) return; // 多人模式禁止暂停
         long now = System.currentTimeMillis();
         if (value) {
             pauseStartedAt = now;
@@ -1305,12 +1346,12 @@ public class TetrisView extends View implements Runnable {
 
     private String modeProgress() {
         long elapsed = modeElapsedMs(System.currentTimeMillis());
-        if (gameMode == MODE_SPRINT) return Math.min(lines, 40) + "/40行 " + formatTime(elapsed);
-        if (gameMode == MODE_ULTRA) return "剩余 " + formatTime(120000 - elapsed);
-        if (gameMode == MODE_MARATHON) return Math.min(lines, 150) + "/150行";
+        if (gameMode == MODE_SPRINT) return Math.min(lines, 40 * soloStage) + "/" + (40 * soloStage) + "行 " + formatTime(elapsed);
+        if (gameMode == MODE_ULTRA) return "剩余 " + formatTime(120000 - elapsed) + " 目标 " + (soloStage * 5000) + "分";
+        if (gameMode == MODE_MARATHON) return Math.min(lines, 150 * soloStage) + "/" + (150 * soloStage) + "行";
         if (gameMode == MODE_INVISIBLE) return "行 " + lines + " " + formatTime(elapsed);
         if (gameMode == MODE_DIG) return Math.min(lines, digTargetLines) + "/" + digTargetLines + "行 " + formatTime(elapsed);
-        if (gameMode == MODE_SURVIVAL) return "级 " + level + " " + formatTime(elapsed);
+        if (gameMode == MODE_SURVIVAL) return "级 " + level + " 关 " + soloStage + " " + formatTime(elapsed);
         return "时间 " + formatTime(elapsed);
     }
 
@@ -1326,11 +1367,22 @@ public class TetrisView extends View implements Runnable {
     private void checkMultiFinish() {
         if (solo || p2p == null) return;
         int alive = over ? 0 : 1;
-        for (PeerInfo pi : peerInfos.values()) if (!pi.over && !pi.disconnected) alive++;
+        int playing = over ? 0 : 1;
+        for (PeerInfo pi : peerInfos.values()) {
+            if (!pi.over && !pi.disconnected) alive++;
+            if (!pi.over) playing++;
+        }
         if (alive <= 1 && rankingUntil == 0) {
             if (!over) finishGame("获胜");
             showRankingAndReturn();
+        } else if (playing > 0 && allPeersOver() && rankingUntil == 0) {
+            showRankingAndReturn();
         }
+    }
+    private boolean allPeersOver() {
+        if (!over) return false;
+        for (PeerInfo pi : peerInfos.values()) if (!pi.over) return false;
+        return true;
     }
 
     private void cleanupDisconnectedPeers(long now) {
@@ -1388,7 +1440,7 @@ public class TetrisView extends View implements Runnable {
         if (!solo) return false;
         if (gameMode == MODE_SPRINT && lines >= 40 * soloStage) { advanceStage(); return true; }
         if (gameMode == MODE_MARATHON && lines >= 150 * soloStage) { advanceStage(); return true; }
-        if (gameMode == MODE_DIG && lines >= 10 * soloStage) { advanceStage(); return true; }
+        if (gameMode == MODE_DIG && lines >= digTargetLines) { advanceStage(); return true; }
         if (gameMode == MODE_ULTRA && score >= soloStage * 5000) { advanceStage(); return true; }
         return false;
     }
@@ -1440,16 +1492,16 @@ public class TetrisView extends View implements Runnable {
         lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
     private Piece randomPiece(){ if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
-    private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; cur.rot=0; cur.spin=false; onGround=false; canHold=true; if(!ok(cur,0,0,cur.s)){ if(!solo){ finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
+    private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; cur.rot=0; cur.spin=false; cur.mini=false; onGround=false; canHold=true; if(!ok(cur,0,0,cur.s)){ if(!solo){ finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
     private boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; cur.x+=dx; cur.y+=dy; if(dx!=0){ tone(sMove); if(onGround&&lockResets<MAX_LOCK_RESETS){ lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS; lockResets++; } } return true; }
     private boolean ok(Piece pc,int dx,int dy,int[][] s){ for(int r=0;r<s.length;r++) for(int x=0;x<s[r].length;x++) if(s[r][x]!=0){int xx=pc.x+x+dx, yy=pc.y+r+dy; if(xx<0||xx>=C||yy>=R) return false; if(yy>=0&&board[yy][xx]!=0)return false;} return true; }
-    private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int newRot=(cur.rot+(cw?1:3))%4; int idx=cw?cur.rot*2:((cur.rot+3)%4)*2+1; int[][][] table=(cur.type==1)?SRS_I:SRS_JLSTZ; for(int[] k:table[idx]) if(ok(cur,k[0],k[1],ns)){cur.s=ns;cur.x+=k[0];cur.y+=k[1];cur.rot=newRot;cur.spin=true;if(onGround&&lockResets<MAX_LOCK_RESETS){lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS;lockResets++;}tone(sRotate);return;} }
+    private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int newRot=(cur.rot+(cw?1:3))%4; int idx=cw?cur.rot*2:((cur.rot+3)%4)*2+1; int[][][] table=(cur.type==1)?SRS_I:SRS_JLSTZ; for(int ki=0;ki<table[idx].length;ki++){ int[] k=table[idx][ki]; if(ok(cur,k[0],k[1],ns)){cur.s=ns;cur.x+=k[0];cur.y+=k[1];cur.rot=newRot;cur.spin=(cur.type==3&&(k[0]!=0||k[1]!=0));cur.mini=false;if(onGround&&lockResets<MAX_LOCK_RESETS){lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS;lockResets++;}tone(sRotate);return;} } }
     private int[][] rot(int[][] s, boolean cw){ int n=s.length; int[][] a=new int[n][n]; for(int r=0;r<n;r++) for(int c=0;c<n;c++) if(cw)a[c][n-1-r]=s[r][c]; else a[n-1-c][r]=s[r][c]; return a; }
     private int ghostY(){ int y=cur.y; while(ok(cur,0,y-cur.y+1,cur.s)) y++; return y; }
-    private void lock(){ boolean lockOut=false; for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy<0) lockOut=true; else board[yy][cur.x+x]=cur.type;} if(lockOut){finishGame("游戏结束");return;} boolean spin=tspin(); int n=doClear(spin); if(checkModeFinish()) return; if(n>0){areUntil=System.currentTimeMillis()+ARE_MS;clearing=true;}else{applyGarbage();spawn();} }
-    private boolean tspin(){ if(cur==null||cur.type!=3||!cur.spin)return false; int cx=cur.x+1, cy=cur.y+1, n=0; int[][] pts={{cx-1,cy-1},{cx+1,cy-1},{cx-1,cy+1},{cx+1,cy+1}}; for(int[] q:pts){int x=q[0],y=q[1]; if(x<0||x>=C||y>=R||(y>=0&&board[y][x]!=0))n++;} return n>=3; }
-    private int doClear(boolean spin){ int n=0; for(int y=R-1;y>=0;y--){ boolean full=true; for(int x=0;x<C;x++) if(board[y][x]==0){full=false;break;} if(full){ lineBurst(y); for(int yy=y;yy>0;yy--) board[yy]=board[yy-1].clone(); board[0]=new int[C]; n++; y++; }} if(n>0){ combo++; boolean difficult=n==4||spin; if(difficult)b2b++; else b2b=0; int base=new int[]{0,100,300,500,800}[n]; if(spin)base=n==1?800:n==2?1200:1600; int bonus=combo>0?combo*50:0; score+=(base+bonus)*level; lines+=n; level=lines/10+1; if(gameMode==MODE_SURVIVAL) dropMs=Math.max(40,1000-(level-1)*130); else dropMs=Math.max(80,1000-(level-1)*90); int garbage=garbageFor(n, spin); if(garbage>0&&pendingGarbage>0){int cancel=Math.min(garbage,pendingGarbage); pendingGarbage-=cancel; garbage-=cancel;} if(!solo&&p2p!=null&&garbage>0)p2p.sendGarbage(garbage); fx((spin?"T-SPIN ":(n==4?"TETRIS ":"CLEAR "))+n+(combo>1?" COMBO "+combo:""), difficult||n>=3); tone(difficult?sTetris:sClear); } else { combo=-1; } return n; }
-    private int garbageFor(int n, boolean spin){ int g=0; if(spin)g=n==1?2:n==2?4:6; else if(n==2)g=1; else if(n==3)g=2; else if(n==4)g=4; if(b2b>1&&(spin||n==4))g++; if(combo>1)g+=(combo<4?1:combo<6?2:3); g += badges/2; return g; }
+    private void lock(){ boolean lockOut=false; for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy<0) lockOut=true; else board[yy][cur.x+x]=cur.type;} if(lockOut){finishGame("游戏结束");return;} int spinType=checkTSpin(); int n=doClear(spinType); if(checkModeFinish()) return; if(n>0){areUntil=System.currentTimeMillis()+ARE_MS;clearing=true;}else{applyGarbage();spawn();} }
+    private int checkTSpin(){ if(cur==null||cur.type!=3||!cur.spin)return 0; int cx=cur.x+1, cy=cur.y+1, n=0; int[][] pts={{cx-1,cy-1},{cx+1,cy-1},{cx-1,cy+1},{cx+1,cy+1}}; for(int[] q:pts){int x=q[0],y=q[1]; if(x<0||x>=C||y>=R||(y>=0&&board[y][x]!=0))n++;} if(n<3)return 0; return n==4?2:1; }
+    private int doClear(int spinType){ int n=0; for(int y=R-1;y>=0;y--){ boolean full=true; for(int x=0;x<C;x++) if(board[y][x]==0){full=false;break;} if(full){ lineBurst(y); for(int yy=y;yy>0;yy--) board[yy]=board[yy-1].clone(); board[0]=new int[C]; n++; y++; }} if(n>0){ combo++; boolean difficult=n==4||spinType>=1; if(difficult)b2b++; else b2b=0; int base=new int[]{0,100,300,500,800}[n]; if(spinType==2) base=n==1?800:n==2?1200:1600; else if(spinType==1) base=n==1?200:n==2?400:600; int bonus=combo>0?combo*50:0; score+=(base+bonus)*level; lines+=n; level=lines/10+1; if(gameMode==MODE_SURVIVAL) dropMs=Math.max(40,1000-(level-1)*130); else dropMs=Math.max(80,1000-(level-1)*90); int garbage=garbageFor(n, spinType); if(garbage>0&&pendingGarbage>0){int cancel=Math.min(garbage,pendingGarbage); pendingGarbage-=cancel; garbage-=cancel;} if(!solo&&p2p!=null&&garbage>0)p2p.sendGarbage(garbage); fx((spinType>=1?(spinType==2?"T-SPIN ":"T-SPIN MINI "):(n==4?"TETRIS ":"CLEAR "))+n+(combo>1?" COMBO "+combo:""), difficult||n>=3); tone(difficult?sTetris:sClear); } else { combo=-1; } return n; }
+    private int garbageFor(int n, int spinType){ int g=0; if(spinType==2)g=n==1?2:n==2?4:6; else if(spinType==1)g=n==1?0:n==2?1:2; else if(n==2)g=1; else if(n==3)g=2; else if(n==4)g=4; if(b2b>1&&(spinType>=1||n==4))g++; if(combo>1)g+=(combo<4?1:combo<6?2:3); g += badges/2; return g; }
     private void lineBurst(int row){ for(int i=0;i<18;i++) particles.add(new FxParticle(bx+rnd.nextFloat()*bw, by+(row+.5f)*cell, (rnd.nextFloat()-.5f)*bw*.7f, (rnd.nextFloat()-.5f)*90f, theme().blockFlash, 3+rnd.nextFloat()*5)); }
     private void applyGarbage(){ if(pendingGarbage>0&&garbageDueAt==0)garbageDueAt=System.currentTimeMillis()+1800; if(pendingGarbage<=0||System.currentTimeMillis()<garbageDueAt)return; while(pendingGarbage>0){ for(int y=0;y<R-1;y++) board[y]=board[y+1].clone(); int hole=rnd.nextInt(C); board[R-1]=new int[C]; for(int x=0;x<C;x++) board[R-1][x]=(x==hole)?0:7; pendingGarbage--; } garbageDueAt=0; fx("GARBAGE", true); tone(sGarbage); }
     private void hold(){ if(!canHold||cur==null||over)return; int t=cur.type; if(hold==0){hold=t; spawn();} else {cur=new Piece(hold); cur.x=3; cur.y=0; hold=t;} canHold=false; tone(sReady); }
@@ -1560,20 +1612,31 @@ public class TetrisView extends View implements Runnable {
         for (BotPlayer bot : bots.values()) {
             if (bot.over) continue;
             if (now < bot.thinkUntil) continue;
-            // Dynamic difficulty: scale with real players' avg level
+            // Dynamic difficulty: scale with real players' performance
             int avgLevel = bot.level;
             int realCount = 0;
             int totalLevel = bot.level;
+            float realEfficiency = 0; // lines per minute
+            long elapsedMin = Math.max(1, modeElapsedMs(now) / 60000);
             for (PeerInfo pi : peerInfos.values()) {
                 if (!pi.name.startsWith("BOT_")) {
                     totalLevel += pi.level;
+                    realEfficiency += (float)pi.lines / elapsedMin;
                     realCount++;
                 }
             }
-            if (realCount > 0) avgLevel = totalLevel / (realCount + 1);
+            if (realCount > 0) {
+                avgLevel = totalLevel / (realCount + 1);
+                realEfficiency /= realCount;
+            }
+            float botEfficiency = (float)bot.lines / elapsedMin;
+            // Keep bot within 80%-120% of real player efficiency
+            int speedAdj = 0;
+            if (botEfficiency < realEfficiency * 0.8f) speedAdj = 1;
+            else if (botEfficiency > realEfficiency * 1.2f) speedAdj = -1;
             bot.iq = Math.min(10, Math.max(3, avgLevel + 2));
-            bot.actionSpeed = Math.min(10, Math.max(2, avgLevel));
-            bot.dropDelay = Math.max(150, 1000 - bot.level * 80);
+            bot.actionSpeed = Math.min(10, Math.max(2, avgLevel + speedAdj));
+            bot.dropDelay = Math.max(120, Math.min(800, 900 - bot.level * 70 - bot.actionSpeed * 30));
 
             // Bot AI tick
             botTick(bot);
@@ -1838,7 +1901,8 @@ public class TetrisView extends View implements Runnable {
                 bot.cur.x += k[0];
                 bot.cur.y += k[1];
                 bot.cur.rot = newRot;
-                bot.cur.spin = true;
+                bot.cur.spin = (bot.cur.type == 3 && (k[0] != 0 || k[1] != 0));
+                bot.cur.mini = false;
                 return true;
             }
         }
@@ -1974,5 +2038,5 @@ public class TetrisView extends View implements Runnable {
         PeerInfo(String name) { this.name = name; }
     }
     private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }
-    private static class Piece { int type,x=3,y=0,rot=0; boolean spin=false; int[][] s; Piece(int t){type=t; s=copy(SHAPES[t]); rot=0;} Piece(JSONObject o)throws Exception{type=o.getInt("type");x=o.getInt("x");y=o.getInt("y");rot=o.optInt("rot",0);JSONArray a=o.getJSONArray("s");s=new int[a.length()][a.length()];for(int r=0;r<a.length();r++){JSONArray row=a.getJSONArray(r);for(int c=0;c<row.length();c++)s[r][c]=row.getInt(c);}} JSONObject json()throws Exception{JSONObject o=new JSONObject();o.put("type",type);o.put("x",x);o.put("y",y);o.put("rot",rot);JSONArray a=new JSONArray();for(int[] rr:s){JSONArray row=new JSONArray();for(int v:rr)row.put(v);a.put(row);}o.put("s",a);return o;} static int[][] copy(int[][] m){int[][] n=new int[m.length][m.length];for(int i=0;i<m.length;i++)n[i]=m[i].clone();return n;} }
+    private static class Piece { int type,x=3,y=0,rot=0; boolean spin=false, mini=false; int[][] s; Piece(int t){type=t; s=copy(SHAPES[t]); rot=0;} Piece(JSONObject o)throws Exception{type=o.getInt("type");x=o.getInt("x");y=o.getInt("y");rot=o.optInt("rot",0);JSONArray a=o.getJSONArray("s");s=new int[a.length()][a.length()];for(int r=0;r<a.length();r++){JSONArray row=a.getJSONArray(r);for(int c=0;c<row.length();c++)s[r][c]=row.getInt(c);}} JSONObject json()throws Exception{JSONObject o=new JSONObject();o.put("type",type);o.put("x",x);o.put("y",y);o.put("rot",rot);o.put("spin",spin);o.put("mini",mini);JSONArray a=new JSONArray();for(int[] rr:s){JSONArray row=new JSONArray();for(int v:rr)row.put(v);a.put(row);}o.put("s",a);return o;} static int[][] copy(int[][] m){int[][] n=new int[m.length][m.length];for(int i=0;i<m.length;i++)n[i]=m[i].clone();return n;} }
 }
