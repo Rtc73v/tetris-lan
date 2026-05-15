@@ -11,6 +11,7 @@ import com.echo.tetrislan.render.TrainingRenderer;
 import com.echo.tetrislan.render.MenuRenderer;
 import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
+import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
 
 import com.echo.tetrislan.core.Piece;
@@ -737,52 +738,52 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private boolean touchMenu(float x, float y) {
         int w=getWidth(), h=getHeight();
         if (menuPage == 0) {
-            if (hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { solo=true; menuPage=1; return true; }
-            if (hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { solo=false; gameMode=MODE_CLASSIC; invisible=false; menuPage=2; return true; }
+            if (TouchUtil.hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { solo=true; menuPage=1; return true; }
+            if (TouchUtil.hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { solo=false; gameMode=MODE_CLASSIC; invisible=false; menuPage=2; return true; }
             return true;
         }
         if (menuPage == 1) {
             float btnH = h * 0.058f, gap = h * 0.010f, sy = h * 0.28f;
-            if (hit(x,y,w*.08f,sy,w*.46f,sy+btnH)) { openSoloMode(MODE_CLASSIC, 0); return true; }
-            if (hit(x,y,w*.54f,sy,w*.92f,sy+btnH)) { openSoloMode(MODE_CLASSIC, 1); return true; }
-            if (hit(x,y,w*.08f,sy+btnH+gap,w*.46f,sy+2*btnH+gap)) { openSoloMode(MODE_SPRINT, 0); return true; }
-            if (hit(x,y,w*.54f,sy+btnH+gap,w*.92f,sy+2*btnH+gap)) { openSoloMode(MODE_ULTRA, 0); return true; }
-            if (hit(x,y,w*.08f,sy+2*(btnH+gap),w*.46f,sy+3*btnH+2*gap)) { openSoloMode(MODE_MARATHON, 0); return true; }
-            if (hit(x,y,w*.54f,sy+2*(btnH+gap),w*.92f,sy+3*btnH+2*gap)) { openSoloMode(MODE_INVISIBLE, 0); return true; }
-            if (hit(x,y,w*.08f,sy+3*(btnH+gap),w*.46f,sy+4*btnH+3*gap)) { openSoloMode(MODE_DIG, 0); return true; }
-            if (hit(x,y,w*.54f,sy+3*(btnH+gap),w*.92f,sy+4*btnH+3*gap)) { openSoloMode(MODE_TRAINING, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy,w*.46f,sy+btnH)) { openSoloMode(MODE_CLASSIC, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy,w*.92f,sy+btnH)) { openSoloMode(MODE_CLASSIC, 1); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy+btnH+gap,w*.46f,sy+2*btnH+gap)) { openSoloMode(MODE_SPRINT, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy+btnH+gap,w*.92f,sy+2*btnH+gap)) { openSoloMode(MODE_ULTRA, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy+2*(btnH+gap),w*.46f,sy+3*btnH+2*gap)) { openSoloMode(MODE_MARATHON, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy+2*(btnH+gap),w*.92f,sy+3*btnH+2*gap)) { openSoloMode(MODE_INVISIBLE, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy+3*(btnH+gap),w*.46f,sy+4*btnH+3*gap)) { openSoloMode(MODE_DIG, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy+3*(btnH+gap),w*.92f,sy+4*btnH+3*gap)) { openSoloMode(MODE_TRAINING, 0); return true; }
             float by = sy + 4*(btnH+gap) + gap*2;
-            if (hit(x,y,w*.14f,by,w*.86f,by+btnH)) { menuPage=0; return true; }
+            if (TouchUtil.hit(x,y,w*.14f,by,w*.86f,by+btnH)) { menuPage=0; return true; }
             return true;
         }
         if (menuPage == 4) {
             float btnH = h * 0.070f, gap = h * 0.018f, sy = h * 0.32f;
             for (int i = 0; i < 3; i++) {
                 float ty = sy + i * (btnH + gap);
-                if (hit(x, y, w*.14f, ty, w*.86f, ty + btnH)) {
+                if (TouchUtil.hit(x, y, w*.14f, ty, w*.86f, ty + btnH)) {
                     trainTech = i; startMode(MODE_TRAINING); return true;
                 }
             }
             float backY = sy + 3 * (btnH + gap) + gap * 2;
-            if (hit(x, y, w*.14f, backY, w*.86f, backY + btnH)) { menuPage = 1; return true; }
+            if (TouchUtil.hit(x, y, w*.14f, backY, w*.86f, backY + btnH)) { menuPage = 1; return true; }
             return true;
         }
         if (menuPage == 3) {
-            if (hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { startMode(pendingStartMode); return true; }
-            if (hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { if (sp.contains(saveKey())) load(); return true; }
-            if (hit(x,y,w*.14f,h*.56f,w*.86f,h*.65f)) { menuPage=1; return true; }
+            if (TouchUtil.hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { startMode(pendingStartMode); return true; }
+            if (TouchUtil.hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { if (sp.contains(saveKey())) load(); return true; }
+            if (TouchUtil.hit(x,y,w*.14f,h*.56f,w*.86f,h*.65f)) { menuPage=1; return true; }
             return true;
         }
         if (p2p == null || p2pDiscovery) {
-            if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
-            if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
             if (lastRoomName != null) {
-                if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { reconnectLastRoom(); return true; }
-                if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { askName(); return true; }
-                if (hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
+                if (TouchUtil.hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { reconnectLastRoom(); return true; }
+                if (TouchUtil.hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { askName(); return true; }
+                if (TouchUtil.hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
             } else {
-                if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
-                if (hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
+                if (TouchUtil.hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
+                if (TouchUtil.hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
             }
             // 点击发现的房间卡片加入
             int nf = foundRooms.size();
@@ -790,26 +791,26 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             int limit = Math.min(nf, 4);
             for (int i = 0; i < limit; i++) {
                 float cy = cardY + i * (cardH + cardGap);
-                if (hit(x,y,cardL,cy,cardR,cy+cardH)) {
+                if (TouchUtil.hit(x,y,cardL,cy,cardR,cy+cardH)) {
                     DiscoveredRoom dr = foundRooms.get(i);
                     joinRoom(dr.room, dr.host);
                     return true;
                 }
             }
         } else {
-            if (hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) {
+            if (TouchUtil.hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) {
                 if (isHost) { if (canHostStart()) hostStartGame(); return true; }
                 else { toggleReady(); return true; }
             }
-            if (hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askChat(); return true; }
-            if (hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
-            if (hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { leaveRoom(); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askChat(); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { leaveRoom(); return true; }
             if (isHost) {
                 int bc = botCount();
-                if (hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) {
+                if (TouchUtil.hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) {
                     if (playerCount() < MAX_PLAYERS) { addBot(); return true; }
                 }
-                if (hit(x,y,w*.54f,h*.53f,w*.92f,h*.61f)) {
+                if (TouchUtil.hit(x,y,w*.54f,h*.53f,w*.92f,h*.61f)) {
                     if (bc > 0) { removeBot(); return true; }
                     else if (!peerNames.isEmpty()) { kickPlayer(); return true; }
                 }
@@ -824,41 +825,41 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             float dw=w*.78f, dh=h*.28f, dy=(h-dh)/2;
             float btnW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.72f, gap=dw*.05f;
             float bx1=w/2f-btnW*1.5f-gap, bx2=w/2f-btnW/2f, bx3=w/2f+btnW/2f+gap;
-            if (hit(x,y,bx1,btnY,bx1+btnW,btnY+btnH)) { save(true); confirmQuit=false; goMenu(); return true; }
-            if (hit(x,y,bx2,btnY,bx2+btnW,btnY+btnH)) { confirmQuit=false; goMenu(); return true; }
-            if (hit(x,y,bx3,btnY,bx3+btnW,btnY+btnH)) { confirmQuit=false; return true; }
+            if (TouchUtil.hit(x,y,bx1,btnY,bx1+btnW,btnY+btnH)) { save(true); confirmQuit=false; goMenu(); return true; }
+            if (TouchUtil.hit(x,y,bx2,btnY,bx2+btnW,btnY+btnH)) { confirmQuit=false; goMenu(); return true; }
+            if (TouchUtil.hit(x,y,bx3,btnY,bx3+btnW,btnY+btnH)) { confirmQuit=false; return true; }
             return true;
         }
-        if (solo && hit(x,y,w*.16f,h*.26f,w*.84f,h*.33f)) { settings=false; setPaused(false); return true; }
-        if (solo && hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { load(); settings=false; return true; }
-        if (solo && hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { save(true); return true; }
-        if (!solo && hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; return true; }
+        if (solo && TouchUtil.hit(x,y,w*.16f,h*.26f,w*.84f,h*.33f)) { settings=false; setPaused(false); return true; }
+        if (solo && TouchUtil.hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { load(); settings=false; return true; }
+        if (solo && TouchUtil.hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { save(true); return true; }
+        if (!solo && TouchUtil.hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; return true; }
         // DAS/ARR/软降 点击
         float rowH = h * 0.068f;
         float sy = h * 0.55f;
         float btnW = w * 0.12f;
         for (int i = 0; i < 3; i++) {
             float rowY = sy + i * rowH;
-            if (hit(x,y,w*.60f,rowY,w*.60f+btnW,rowY+rowH*0.85f)) {
+            if (TouchUtil.hit(x,y,w*.60f,rowY,w*.60f+btnW,rowY+rowH*0.85f)) {
                 if (i==0) { dasMs = Math.max(0, dasMs - 10); sp.edit().putLong("das_ms", dasMs).apply(); }
                 else if (i==1) { arrMs = Math.max(0, arrMs - 2); sp.edit().putLong("arr_ms", arrMs).apply(); }
                 else { softMs = Math.max(10, softMs - 10); sp.edit().putLong("soft_ms", softMs).apply(); }
                 return true;
             }
-            if (hit(x,y,w*.74f,rowY,w*.74f+btnW,rowY+rowH*0.85f)) {
+            if (TouchUtil.hit(x,y,w*.74f,rowY,w*.74f+btnW,rowY+rowH*0.85f)) {
                 if (i==0) { dasMs = Math.min(500, dasMs + 10); sp.edit().putLong("das_ms", dasMs).apply(); }
                 else if (i==1) { arrMs = Math.min(200, arrMs + 2); sp.edit().putLong("arr_ms", arrMs).apply(); }
                 else { softMs = Math.min(500, softMs + 10); sp.edit().putLong("soft_ms", softMs).apply(); }
                 return true;
             }
         }
-        if (hit(x,y,w*.16f,h*.82f,w*.84f,h*.89f)) {
+        if (TouchUtil.hit(x,y,w*.16f,h*.82f,w*.84f,h*.89f)) {
             if (!over && !menu) { confirmQuit = true; return true; }
             goMenu(); return true;
         }
         return true;
     }
-    private boolean hit(float x,float y,float l,float t,float r,float b){return x>=l&&x<=r&&y>=t&&y<=b;}
+    
 
     private void startP2p() {
         if (p2p != null) return;
