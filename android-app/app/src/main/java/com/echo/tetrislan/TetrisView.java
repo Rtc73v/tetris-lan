@@ -15,6 +15,7 @@ import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
 
 import com.echo.tetrislan.core.Piece;
+import com.echo.tetrislan.SoloModeController;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -59,6 +60,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final InvisibleRenderer invisibleRenderer = new InvisibleRenderer();
     private final TrainingRenderer trainingRenderer = new TrainingRenderer(p);
     private final InputController inputController = new InputController(this);
+    private final SoloModeController soloModeController = new SoloModeController(this);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -89,7 +91,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private long garbageDueAt = 0;
     private String fxText = "";
     private long fxUntil = 0, shakeUntil = 0, flashUntil = 0;
-    private int soloStage = 1;
+    int soloStage = 1;
     private long rankingUntil = 0;
     private RectF soloOverRestartBtn = null;
     private RectF soloOverRetryBtn = null;
@@ -100,9 +102,10 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private long lastP2pSend = 0;
     private boolean running = true, menu = true, over = true, paused = false, settings = false, confirmQuit = false;
     private boolean newHighScore = false;
-    private boolean solo = true, canHold = true;
-    private int gameMode = MODE_CLASSIC;
-    private int classicSpeed = 0; // 0=普通(经典), 1=高速(原生存)
+    boolean solo = true;
+    private boolean canHold = true;
+    int gameMode = MODE_CLASSIC;
+    int classicSpeed = 0; // 0=普通(经典), 1=高速(原生存)
     private long modeStartAt = 0, pauseStartedAt = 0, pausedTotalMs = 0;
     private String finishText = "";
     private boolean invisible = false;
@@ -121,7 +124,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private static final long INVISIBLE_GAP_ON_MS = 700;
     private int digTargetLines = 0;
     private int digCleared = 0;
-    private int trainTech = 0;
+    int trainTech = 0;
     private int trainSuccess = 0;
     private String trainFailText = "";
     private long trainResetAt = 0;
@@ -129,8 +132,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private Piece trainDemoStartPiece = null; // 训练模式演示起手
     private int trainDemoStartX = 0, trainDemoStartY = 0, trainDemoTargetX = 0, trainDemoTargetY = 0, trainDemoRotDir = 1;
     private boolean[][] isGarbage;
-    private int menuPage = 0; // 0 main, 1 solo actions, 2 multiplayer actions, 3 new/load for solo mode, 4 training technique select
-    private int pendingStartMode = MODE_CLASSIC; // mode selected waiting for new/load choice
+    int menuPage = 0; // 0 main, 1 solo actions, 2 multiplayer actions, 3 new/load for solo mode, 4 training technique select
+    int pendingStartMode = MODE_CLASSIC; // mode selected waiting for new/load choice
     private int statusBarH = 0;
     private int[][] board = new int[R][C];
     private Piece cur, next;
@@ -747,14 +750,14 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
         if (menuPage == 1) {
             float btnH = h * 0.058f, gap = h * 0.010f, sy = h * 0.28f;
-            if (TouchUtil.hit(x,y,w*.08f,sy,w*.46f,sy+btnH)) { openSoloMode(MODE_CLASSIC, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy,w*.92f,sy+btnH)) { openSoloMode(MODE_CLASSIC, 1); return true; }
-            if (TouchUtil.hit(x,y,w*.08f,sy+btnH+gap,w*.46f,sy+2*btnH+gap)) { openSoloMode(MODE_SPRINT, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy+btnH+gap,w*.92f,sy+2*btnH+gap)) { openSoloMode(MODE_ULTRA, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.08f,sy+2*(btnH+gap),w*.46f,sy+3*btnH+2*gap)) { openSoloMode(MODE_MARATHON, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy+2*(btnH+gap),w*.92f,sy+3*btnH+2*gap)) { openSoloMode(MODE_INVISIBLE, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.08f,sy+3*(btnH+gap),w*.46f,sy+4*btnH+3*gap)) { openSoloMode(MODE_DIG, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy+3*(btnH+gap),w*.92f,sy+4*btnH+3*gap)) { openSoloMode(MODE_TRAINING, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy,w*.46f,sy+btnH)) { soloModeController.openSoloMode(MODE_CLASSIC, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy,w*.92f,sy+btnH)) { soloModeController.openSoloMode(MODE_CLASSIC, 1); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy+btnH+gap,w*.46f,sy+2*btnH+gap)) { soloModeController.openSoloMode(MODE_SPRINT, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy+btnH+gap,w*.92f,sy+2*btnH+gap)) { soloModeController.openSoloMode(MODE_ULTRA, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy+2*(btnH+gap),w*.46f,sy+3*btnH+2*gap)) { soloModeController.openSoloMode(MODE_MARATHON, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy+2*(btnH+gap),w*.92f,sy+3*btnH+2*gap)) { soloModeController.openSoloMode(MODE_INVISIBLE, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.08f,sy+3*(btnH+gap),w*.46f,sy+4*btnH+3*gap)) { soloModeController.openSoloMode(MODE_DIG, 0); return true; }
+            if (TouchUtil.hit(x,y,w*.54f,sy+3*(btnH+gap),w*.92f,sy+4*btnH+3*gap)) { soloModeController.openSoloMode(MODE_TRAINING, 0); return true; }
             float by = sy + 4*(btnH+gap) + gap*2;
             if (TouchUtil.hit(x,y,w*.14f,by,w*.86f,by+btnH)) { menuPage=0; return true; }
             return true;
@@ -764,7 +767,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             for (int i = 0; i < 3; i++) {
                 float ty = sy + i * (btnH + gap);
                 if (TouchUtil.hit(x, y, w*.14f, ty, w*.86f, ty + btnH)) {
-                    trainTech = i; startMode(MODE_TRAINING); return true;
+                    trainTech = i; soloModeController.startMode(MODE_TRAINING); return true;
                 }
             }
             float backY = sy + 3 * (btnH + gap) + gap * 2;
@@ -772,7 +775,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             return true;
         }
         if (menuPage == 3) {
-            if (TouchUtil.hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { startMode(pendingStartMode); return true; }
+            if (TouchUtil.hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { soloModeController.startMode(pendingStartMode); return true; }
             if (TouchUtil.hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { if (sp.contains(saveKey())) load(); return true; }
             if (TouchUtil.hit(x,y,w*.14f,h*.56f,w*.86f,h*.65f)) { menuPage=1; return true; }
             return true;
@@ -1198,15 +1201,6 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             .setNegativeButton("取消", null).show();
     }
 
-    private void openSoloMode(int mode, int speed) {
-        solo = true;
-        gameMode = mode;
-        classicSpeed = (mode == MODE_CLASSIC) ? speed : 0;
-        if (mode == MODE_TRAINING) { trainTech = 0; menuPage = 4; return; }
-        pendingStartMode = mode;
-        menuPage = 3;
-    }
-
     private String clean(String s, String fallback) {
         if (s == null) return fallback;
         String v = s.trim().replace("|", "");
@@ -1584,8 +1578,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         lastDrop = System.currentTimeMillis();
     }
 
-    private void start() { start(System.currentTimeMillis()); }
-    private void startMode(int mode) { gameMode = mode; soloStage = 1; start(); }
+    void start() { start(System.currentTimeMillis()); }
+
     private void setupTrainingBoard() {
         board = new int[R][C]; score = 0; lines = 0; level = 1; hold = 0; pendingGarbage = 0;
         combo = -1; b2b = 0; canHold = true; bagIndex = 7; over = false;
