@@ -1,6 +1,7 @@
 package com.echo.tetrislan;
 
 import com.echo.tetrislan.net.DiscoveredRoom;
+import com.echo.tetrislan.render.ColorUtil;
 import com.echo.tetrislan.render.FxParticle;
 import com.echo.tetrislan.render.LayoutState;
 import com.echo.tetrislan.render.MenuRenderer;
@@ -635,7 +636,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             FxParticle f = particles.get(i);
             float life = (now - f.born) / 650f;
             if (life >= 1f) { particles.remove(i); continue; }
-            p.setColor(applyAlpha(f.color, 1f-life));
+            p.setColor(ColorUtil.applyAlpha(f.color, 1f-life));
             c.drawCircle(f.x + f.vx*life, f.y + f.vy*life, f.size*(1f-life*.35f), p);
         }
     }
@@ -643,7 +644,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private void drawFxOverlay(Canvas c, int w, int h) {
         long now = System.currentTimeMillis();
         if (now < flashUntil) {
-            p.setColor(applyAlpha(theme().blockFlash, .16f));
+            p.setColor(ColorUtil.applyAlpha(theme().blockFlash, .16f));
             c.drawRect(0, 0, w, h, p);
         }
         if (now < fxUntil && !fxText.isEmpty()) {
@@ -704,13 +705,12 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     }
 
     private void block(Canvas c, int x, int y, int type, float alpha) {
-        p.setColor(applyAlpha(theme().colors[type], alpha));
+        p.setColor(ColorUtil.applyAlpha(theme().colors[type], alpha));
         float l=bx+x*cell, t=by+y*cell;
         c.drawRect(l+1,t+1,l+cell-2,t+cell-2,p);
-        p.setColor(applyAlpha(theme().blockFlash, alpha*.22f));
+        p.setColor(ColorUtil.applyAlpha(theme().blockFlash, alpha*.22f));
         c.drawRect(l+2,t+2,l+cell-3,Math.max(t+3,t+cell*.28f),p);
     }
-    private int applyAlpha(int color, float alpha) { return (Math.round(255*alpha)<<24) | (color & 0x00ffffff); }
     private void drawPiece(Canvas c, Piece pc, int yy, float alpha) { for(int r=0;r<pc.s.length;r++) for(int x=0;x<pc.s[r].length;x++) if(pc.s[r][x]!=0) block(c,pc.x+x,yy+r,pc.type,alpha); }
 
     private void drawTrainingDemo(Canvas c, long now) {
@@ -768,7 +768,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private void drawDemoArrow(Canvas c, float sx, float sy, float tx, float ty) {
         float x1 = bx + (sx + 1.5f) * cell, y1 = by + (sy + 1.5f) * cell;
         float x2 = bx + (tx + 1.5f) * cell, y2 = by + (ty + 1.5f) * cell;
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * 0.12f)); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(applyAlpha(0xFFFFFFFF, 0.55f));
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * 0.12f)); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(ColorUtil.applyAlpha(0xFFFFFFFF, 0.55f));
         c.drawLine(x1, y1, x2, y2, p);
         p.setStrokeCap(Paint.Cap.BUTT); p.setStyle(Paint.Style.FILL);
         c.drawCircle(x2, y2, Math.max(4, cell * 0.16f), p);
@@ -776,13 +776,13 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private void drawDemoPieceAt(Canvas c, int type, int[][] shape, float px, float py, float alpha, boolean outline) {
         float flash = 0.65f + 0.25f * (float)Math.sin(System.currentTimeMillis() / 180.0);
         int col = theme().colors[type];
-        p.setStyle(Paint.Style.FILL); p.setColor(applyAlpha(col, alpha * flash));
+        p.setStyle(Paint.Style.FILL); p.setColor(ColorUtil.applyAlpha(col, alpha * flash));
         for (int r = 0; r < shape.length; r++) for (int x = 0; x < shape[r].length; x++) if (shape[r][x] != 0) {
             float l = bx + (px + x) * cell, t = by + (py + r) * cell;
             c.drawRect(l + 2, t + 2, l + cell - 2, t + cell - 2, p);
         }
         if (outline) {
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * 0.14f)); p.setColor(applyAlpha(0xFFFFFFFF, 0.85f * flash));
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * 0.14f)); p.setColor(ColorUtil.applyAlpha(0xFFFFFFFF, 0.85f * flash));
             for (int r = 0; r < shape.length; r++) for (int x = 0; x < shape[r].length; x++) if (shape[r][x] != 0) {
                 float l = bx + (px + x) * cell, t = by + (py + r) * cell;
                 c.drawRect(l + 2, t + 2, l + cell - 2, t + cell - 2, p);
@@ -836,7 +836,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         return false;
     }
     private void drawGapHint(Canvas c, int x, int y, float alpha) {
-        p.setColor(applyAlpha(0xff00e5ff, alpha));
+        p.setColor(ColorUtil.applyAlpha(0xff00e5ff, alpha));
         float l = bx + x * cell + cell * 0.35f;
         float t = by + y * cell + cell * 0.35f;
         float r = l + cell * 0.3f;
