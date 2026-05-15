@@ -58,6 +58,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final FxRenderer fxRenderer = new FxRenderer(p);
     private final InvisibleRenderer invisibleRenderer = new InvisibleRenderer();
     private final TrainingRenderer trainingRenderer = new TrainingRenderer(p);
+    private final InputController inputController = new InputController(this);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -133,14 +134,16 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private int statusBarH = 0;
     private int[][] board = new int[R][C];
     private Piece cur, next;
-    private int hold = 0, score = 0, lines = 0, level = 1;
+    int hold = 0, score = 0, lines = 0, level = 1;
     private long lastDrop = 0, dropMs = 1000, lastSave = 0;
-    private long dasMs = 167, arrMs = 33, softMs = 120;
+    long dasMs = 167, arrMs = 33, softMs = 120;
     private static final long HARD_COOLDOWN_MS = 350;
     private static final long LOCK_DELAY_MS = 500, ARE_MS = 400;
     private static final int MAX_LOCK_RESETS = 15;
-    private boolean leftHeld = false, rightHeld = false, softHeld = false, hardReady = true;
-    private long leftStart = 0, rightStart = 0, arrAt = 0, softStart = 0, softAt = 0, lastHard = 0;
+    boolean leftHeld = false, rightHeld = false, softHeld = false;
+    private boolean hardReady = true;
+    long leftStart = 0, rightStart = 0, arrAt = 0, softStart = 0, softAt = 0;
+    private long lastHard = 0;
     private int pendingIRS = 0; // 0=none, 1=cw, -1=ccw
     private boolean pendingIHS = false;
     private long lockUntil = 0;
@@ -278,7 +281,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                         applyGarbage();
                         spawn();
                     }
-                    input(now);
+                    inputController.input(now);
                 } else if (cur != null) {
                     boolean grounded = !ok(cur, 0, 1, cur.s);
                     if (grounded) {
@@ -297,7 +300,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                             lastDrop = now;
                         }
                     }
-                    input(now);
+                    inputController.input(now);
                 }
                 if (solo && now - lastSave > 5000) {
                     lastSave = now;
@@ -1254,21 +1257,9 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         activeAction = -1;
     }
 
-    private void input(long now) {
-        if (leftHeld && !rightHeld) repeatHorizontal(-1, now, leftStart);
-        else if (rightHeld && !leftHeld) repeatHorizontal(1, now, rightStart);
-        if (softHeld) {
-            long held = now - softStart;
-            long interval = Math.max(14, softMs - held / 12);
-            if (now - softAt > interval) { if (move(0,1)) score++; softAt = now; }
-        }
-    }
 
-    private void repeatHorizontal(int dir, long now, long startedAt) {
-        if (now - startedAt <= dasMs) return;
-        if (arrMs == 0) { while(move(dir,0)); return; }
-        if (now - arrAt > arrMs) { move(dir,0); arrAt = now; }
-    }
+
+
 
     private void act(int a) {
         if (a==8) { settings=true; if (solo) setPaused(true); releaseAction(activeAction); return; }
@@ -1687,7 +1678,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private Piece randomPiece(){ if(solo&&gameMode==MODE_TRAINING) return trainNextPiece(); if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
     private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; if(solo&&gameMode==MODE_TRAINING&&trainDemoStartPiece!=null){cur.x=trainDemoStartX;cur.y=trainDemoStartY;cur.s=tShape(trainDemoStartPiece.rot);cur.rot=trainDemoStartPiece.rot;} if(!(solo&&gameMode==MODE_TRAINING))cur.rot=0; cur.spin=false; cur.mini=false; lastActionWasRotate=false; onGround=false; canHold=true; if(invisible){ invisiblePreviewUntil=System.currentTimeMillis()+Math.min(1200+Math.max(0,(int)((700-dropMs)*0.5f)),2500); }        if(!ok(cur,0,0,cur.s)){ if(!solo){ if(pendingGarbage>0&&!lastAttacker.isEmpty()) notifyKO(playerName,lastAttacker); finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
-    private boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; if(dx!=0) lastActionWasRotate=false; cur.x+=dx; cur.y+=dy; if(dx!=0){ tone(sMove); if(onGround&&lockResets<MAX_LOCK_RESETS){ lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS; lockResets++; } } return true; }
+    boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; if(dx!=0) lastActionWasRotate=false; cur.x+=dx; cur.y+=dy; if(dx!=0){ tone(sMove); if(onGround&&lockResets<MAX_LOCK_RESETS){ lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS; lockResets++; } } return true; }
     private boolean ok(Piece pc,int dx,int dy,int[][] s){ for(int r=0;r<s.length;r++) for(int x=0;x<s[r].length;x++) if(s[r][x]!=0){int xx=pc.x+x+dx, yy=pc.y+r+dy; if(xx<0||xx>=C||yy>=R) return false; if(yy>=0&&board[yy][xx]!=0)return false;} return true; }
     private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int newRot=(cur.rot+(cw?1:3))%4; int idx=cw?cur.rot*2:((cur.rot+3)%4)*2+1; int[][][] table=(cur.type==1)?SRS_I:SRS_JLSTZ; for(int ki=0;ki<table[idx].length;ki++){ int[] k=table[idx][ki]; if(ok(cur,k[0],k[1],ns)){cur.s=ns;cur.x+=k[0];cur.y+=k[1];cur.rot=newRot;cur.spin=(cur.type==3);lastActionWasRotate=(cur.type==3);cur.mini=(cur.type==3&&ki>0&&ki<4);if(onGround&&lockResets<MAX_LOCK_RESETS){lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS;lockResets++;}tone(sRotate);return;} } }
     private int[][] rot(int[][] s, boolean cw){ int n=s.length; int[][] a=new int[n][n]; for(int r=0;r<n;r++) for(int c=0;c<n;c++) if(cw)a[c][n-1-r]=s[r][c]; else a[n-1-c][r]=s[r][c]; return a; }
