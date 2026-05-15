@@ -6,6 +6,7 @@ import com.echo.tetrislan.render.FxParticle;
 import com.echo.tetrislan.render.LayoutState;
 import com.echo.tetrislan.render.BoardRenderer;
 import com.echo.tetrislan.render.FxRenderer;
+import com.echo.tetrislan.render.InvisibleRenderer;
 import com.echo.tetrislan.render.MenuRenderer;
 import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
@@ -53,6 +54,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
     private final FxRenderer fxRenderer = new FxRenderer(p);
+    private final InvisibleRenderer invisibleRenderer = new InvisibleRenderer();
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -366,8 +368,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         if (invisible && !over) {
             boolean showAll = !invisible || over || now < invisibleFlashUntil || now < invisiblePreviewUntil || now < invisibleDangerUntil;
             if (!showAll) {
-                if (level >= 6) drawInvisibleEdge(c, now);
-                if (level >= 8) drawInvisibleGaps(c, now);
+                if (level >= 6) invisibleRenderer.drawInvisibleEdge(c, now, board, p, layoutState, theme());
+                if (level >= 8) invisibleRenderer.drawInvisibleGaps(c, now, board, p, layoutState);
             }
         }
         if (solo && gameMode == MODE_TRAINING && trainDemoPiece != null && !over && !paused) {
@@ -751,78 +753,11 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
         return 0;
     }
-    private int invisibleNearRange() {
-        if (level <= 3) return 4;
-        if (level <= 5) return 3;
-        return 2;
-    }
-    private boolean isEdgeBlock(int x, int y) {
-        if (board[y][x] == 0) return false;
-        // 每列最高块
-        boolean isTopmost = true;
-        for (int yy = 0; yy < y; yy++) {
-            if (board[yy][x] != 0) { isTopmost = false; break; }
-        }
-        if (isTopmost) return true;
-        // 与空格相邻
-        if ((y > 0 && board[y-1][x] == 0) || (y < R-1 && board[y+1][x] == 0) ||
-            (x > 0 && board[y][x-1] == 0) || (x < C-1 && board[y][x+1] == 0)) return true;
-        // 井口两侧
-        if (y < R-1 && board[y+1][x] == 0) {
-            boolean leftWall = (x == 0) || (board[y][x-1] != 0);
-            boolean rightWall = (x == C-1) || (board[y][x+1] != 0);
-            if (leftWall && rightWall) return true;
-        }
-        return false;
-    }
-    private void drawGapHint(Canvas c, int x, int y, float alpha) {
-        p.setColor(ColorUtil.applyAlpha(0xff00e5ff, alpha));
-        float l = bx + x * cell + cell * 0.35f;
-        float t = by + y * cell + cell * 0.35f;
-        float r = l + cell * 0.3f;
-        float b = t + cell * 0.3f;
-        c.drawRect(l, t, r, b, p);
-    }
-    private void drawInvisibleGaps(Canvas c, long now) {
-        long phase = now % INVISIBLE_GAP_PERIOD_MS;
-        if (phase >= INVISIBLE_GAP_ON_MS) return;
-        float gapAlpha = 0.35f + 0.25f * ((float)Math.sin(now / 300.0) * 0.5f + 0.5f);
-        int count = 0;
-        // 空洞
-        for (int y = R-1; y >= 0 && count < 6; y--) {
-            for (int x = 0; x < C && count < 6; x++) {
-                if (board[y][x] == 0 && y > 0 && board[y-1][x] != 0) {
-                    drawGapHint(c, x, y, gapAlpha);
-                    count++;
-                }
-            }
-        }
-        // 接近消行的缺口（缺 1-2 个块）
-        for (int y = R-1; y >= 0 && count < 6; y--) {
-            int empty = 0;
-            for (int x = 0; x < C; x++) if (board[y][x] == 0) empty++;
-            if (empty > 0 && empty <= 2) {
-                for (int x = 0; x < C && count < 6; x++) {
-                    if (board[y][x] == 0) {
-                        drawGapHint(c, x, y, gapAlpha);
-                        count++;
-                    }
-                }
-            }
-        }
-    }
-    private void drawInvisibleEdge(Canvas c, long now) {
-        long phase = now % INVISIBLE_EDGE_PERIOD_MS;
-        if (phase >= INVISIBLE_EDGE_ON_MS) return;
-        float edgeAlpha = 0.20f + 0.45f * ((float)Math.sin(now / 200.0) * 0.5f + 0.5f);
-        for (int y = 0; y < R; y++) {
-            for (int x = 0; x < C; x++) {
-                if (board[y][x] != 0 && isEdgeBlock(x, y)) {
-                    BoardRenderer.block(c, p, layoutState, x, y, board[y][x], edgeAlpha, theme());
-                }
-            }
-        }
-    }
+
+
+
+
+
 
     @Override public boolean onTouchEvent(MotionEvent e) {
         int masked = e.getActionMasked();
