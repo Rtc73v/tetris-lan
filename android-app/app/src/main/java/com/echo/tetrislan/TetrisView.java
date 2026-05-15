@@ -4,6 +4,7 @@ import com.echo.tetrislan.net.DiscoveredRoom;
 import com.echo.tetrislan.render.ColorUtil;
 import com.echo.tetrislan.render.FxParticle;
 import com.echo.tetrislan.render.LayoutState;
+import com.echo.tetrislan.render.BoardRenderer;
 import com.echo.tetrislan.render.MenuRenderer;
 import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
@@ -49,6 +50,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     public static final String VERSION = "v1.26.0";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
+    private final BoardRenderer boardRenderer = new BoardRenderer(p);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -355,7 +357,20 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             int stack = maxStackHeight();
             if (stack >= 15) invisibleDangerUntil = now + 1500;
         }
-        drawBoard(c);
+        boardRenderer.drawBoard(c, layoutState, theme(), board, cur, ghostY(), invisible, over, now,
+            invisibleFlashUntil, invisiblePreviewUntil, invisibleDangerUntil,
+            invisibleNearUntil, invisibleNearCY, invisibleNearCX, level,
+            pendingGarbage, garbageDueAt, score, lines);
+        if (invisible && !over) {
+            boolean showAll = !invisible || over || now < invisibleFlashUntil || now < invisiblePreviewUntil || now < invisibleDangerUntil;
+            if (!showAll) {
+                if (level >= 6) drawInvisibleEdge(c, now);
+                if (level >= 8) drawInvisibleGaps(c, now);
+            }
+        }
+        if (solo && gameMode == MODE_TRAINING && trainDemoPiece != null && !over && !paused) {
+            drawTrainingDemo(c, now);
+        }
         drawSide(c);
         drawParticles(c);
         drawBtns(c);
@@ -453,58 +468,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         if (!stageInfo.isEmpty()) c.drawText(stageInfo, 12, sy + 100, p);
     }
 
-    private void drawBoard(Canvas c) {
-        p.setStyle(Paint.Style.FILL); p.setColor(theme().board); c.drawRoundRect(new RectF(bx,by,bx+bw,by+bh), 8, 8, p);
-        long now = System.currentTimeMillis();
-        boolean showAll = !invisible || over || now < invisibleFlashUntil || now < invisiblePreviewUntil || now < invisibleDangerUntil;
-        boolean showNear = invisible && !over && !showAll && now < invisibleNearUntil && invisibleNearCY >= 0;
-        boolean showEdge = invisible && !over && !showAll && level >= 6;
-        boolean showGap = invisible && !over && !showAll && level >= 8;
-        if (showAll) {
-            for (int y=0;y<R;y++) for (int x=0;x<C;x++) if (board[y][x] != 0) block(c,x,y,board[y][x],1f);
-        } else {
-            if (showNear) {
-                int range = invisibleNearRange();
-                for (int y=0;y<R;y++) for (int x=0;x<C;x++) {
-                    if (board[y][x] != 0) {
-                        int dy = Math.abs(y - invisibleNearCY);
-                        int dx = Math.abs(x - invisibleNearCX);
-                        if (dy <= range && dx <= range + 1) {
-                            float dist = (dy + dx * 0.7f) / (range + 1);
-                            float alpha = Math.max(0.15f, 1f - dist);
-                            block(c,x,y,board[y][x],alpha);
-                        }
-                    }
-                }
-            }
-            if (showEdge) drawInvisibleEdge(c, now);
-            if (showGap) drawInvisibleGaps(c, now);
-        }
-        if (cur != null) {
-            int gy = ghostY();
-            drawPiece(c, cur, gy, 0.28f);
-            drawPiece(c, cur, cur.y, 1f);
-        }
-        // 训练模式操作演示动画
-        if (solo && gameMode == MODE_TRAINING && trainDemoPiece != null && !over && !paused) {
-            drawTrainingDemo(c, now);
-        }
-        // 垃圾行进场预告
-        if (pendingGarbage > 0 && garbageDueAt > 0 && now < garbageDueAt) {
-            int rows = Math.min(pendingGarbage, 20);
-            float progress = 1f - (garbageDueAt - now) / 1800f;
-            int alpha = 60 + (int)(40 * progress);
-            p.setColor((alpha << 24) | 0x00ff4444);
-            for (int i = 0; i < rows; i++)
-                c.drawRect(bx, by + bh - cell * (i + 1), bx + bw, by + bh - cell * i, p);
-        }
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); p.setColor(theme().boardStroke); c.drawRect(bx,by,bx+bw,by+bh,p); p.setStyle(Paint.Style.FILL);
-        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(36); p.setColor(theme().text);
-        float by2 = by + bh + 32;
-        c.drawText("分", bx, by2, p); p.setColor(theme().score); c.drawText(String.valueOf(score), bx + 52, by2, p);
-        p.setColor(theme().text); c.drawText("级", bx + 160, by2, p); p.setColor(theme().score); c.drawText(String.valueOf(level), bx + 202, by2, p);
-        p.setColor(theme().text); c.drawText("行", bx + 290, by2, p); p.setColor(theme().score); c.drawText(String.valueOf(lines), bx + 332, by2, p);
-    }
+
 
     private void drawSide(Canvas c) {
         float sx = bx + bw + 8;
@@ -704,47 +668,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
     }
 
-    private void block(Canvas c, int x, int y, int type, float alpha) {
-        p.setColor(ColorUtil.applyAlpha(theme().colors[type], alpha));
-        float l=bx+x*cell, t=by+y*cell;
-        c.drawRect(l+1,t+1,l+cell-2,t+cell-2,p);
-        p.setColor(ColorUtil.applyAlpha(theme().blockFlash, alpha*.22f));
-        c.drawRect(l+2,t+2,l+cell-3,Math.max(t+3,t+cell*.28f),p);
-    }
-    private void drawPiece(Canvas c, Piece pc, int yy, float alpha) { for(int r=0;r<pc.s.length;r++) for(int x=0;x<pc.s[r].length;x++) if(pc.s[r][x]!=0) block(c,pc.x+x,yy+r,pc.type,alpha); }
 
-    private void drawTrainingDemo(Canvas c, long now) {
-        if (trainDemoStartPiece == null) return;
-        long cycle = 5600L;
-        long t = now % cycle;
-        float x = trainDemoStartX, y = trainDemoStartY;
-        int[][] shape = trainDemoStartPiece.s;
-        String step = "1 起手";
-        if (t >= 1400 && t < 2800) {
-            float k = (t - 1400) / 1400f;
-            x = lerp(trainDemoStartX, trainDemoTargetX, k);
-            y = lerp(trainDemoStartY, trainDemoTargetY, k);
-            step = trainDemoMoveText();
-        } else if (t >= 2800 && t < 4200) {
-            x = trainDemoTargetX;
-            y = trainDemoTargetY;
-            float k = (t - 2800) / 1400f;
-            shape = k < 0.55f ? trainDemoStartPiece.s : trainDemoPiece.s;
-            step = trainDemoRotDir > 0 ? "3 顺旋入位" : "3 逆旋入位";
-        } else if (t >= 4200) {
-            x = trainDemoTargetX;
-            y = trainDemoTargetY;
-            shape = trainDemoPiece.s;
-            step = "4 速降锁定";
-        }
-        drawDemoPieceAt(c, trainDemoPiece.type, trainDemoPiece.s, trainDemoTargetX, trainDemoTargetY, 0.20f, true);
-        drawDemoPieceAt(c, trainDemoPiece.type, shape, x, y, 0.36f, true);
-        drawDemoArrow(c, trainDemoStartX, trainDemoStartY, trainDemoTargetX, trainDemoTargetY);
-        p.setStyle(Paint.Style.FILL); p.setTextAlign(Paint.Align.LEFT); p.setTextSize(24); p.setColor(theme().score);
-        c.drawText(step, bx + 8, by + bh - 12, p);
-        p.setColor(theme().text); p.setTextSize(20);
-        c.drawText(trainDemoInputText(), bx + 112, by + bh - 12, p);
-    }
+
 
     private float lerp(float a, float b, float k) { return a + (b - a) * Math.max(0f, Math.min(1f, k)); }
     private String trainDemoMoveText() {
@@ -790,6 +715,39 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
         p.setStyle(Paint.Style.FILL); p.setColor(0xFFFFFFFF);
         c.drawCircle(bx + (px + shape[0].length / 2f) * cell, by + (py + shape.length / 2f) * cell, cell * 0.13f, p);
+    }
+
+    private void drawTrainingDemo(Canvas c, long now) {
+        if (trainDemoStartPiece == null) return;
+        long cycle = 5600L;
+        long t = now % cycle;
+        float x = trainDemoStartX, y = trainDemoStartY;
+        int[][] shape = trainDemoStartPiece.s;
+        String step = "1 起手";
+        if (t >= 1400 && t < 2800) {
+            float k = (t - 1400) / 1400f;
+            x = lerp(trainDemoStartX, trainDemoTargetX, k);
+            y = lerp(trainDemoStartY, trainDemoTargetY, k);
+            step = trainDemoMoveText();
+        } else if (t >= 2800 && t < 4200) {
+            x = trainDemoTargetX;
+            y = trainDemoTargetY;
+            float k = (t - 2800) / 1400f;
+            shape = k < 0.55f ? trainDemoStartPiece.s : trainDemoPiece.s;
+            step = trainDemoRotDir > 0 ? "3 顺旋入位" : "3 逆旋入位";
+        } else if (t >= 4200) {
+            x = trainDemoTargetX;
+            y = trainDemoTargetY;
+            shape = trainDemoPiece.s;
+            step = "4 速降锁定";
+        }
+        drawDemoPieceAt(c, trainDemoPiece.type, trainDemoPiece.s, trainDemoTargetX, trainDemoTargetY, 0.20f, true);
+        drawDemoPieceAt(c, trainDemoPiece.type, shape, x, y, 0.36f, true);
+        drawDemoArrow(c, trainDemoStartX, trainDemoStartY, trainDemoTargetX, trainDemoTargetY);
+        p.setStyle(Paint.Style.FILL); p.setTextAlign(Paint.Align.LEFT); p.setTextSize(24); p.setColor(theme().score);
+        c.drawText(step, bx + 8, by + bh - 12, p);
+        p.setColor(theme().text); p.setTextSize(20);
+        c.drawText(trainDemoInputText(), bx + 112, by + bh - 12, p);
     }
 
     // ===== 隐形模式动态显形 =====
@@ -878,7 +836,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         for (int y = 0; y < R; y++) {
             for (int x = 0; x < C; x++) {
                 if (board[y][x] != 0 && isEdgeBlock(x, y)) {
-                    block(c, x, y, board[y][x], edgeAlpha);
+                    BoardRenderer.block(c, p, layoutState, x, y, board[y][x], edgeAlpha, theme());
                 }
             }
         }
