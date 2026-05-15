@@ -3,6 +3,7 @@ package com.echo.tetrislan;
 import com.echo.tetrislan.net.DiscoveredRoom;
 import com.echo.tetrislan.render.FxParticle;
 import com.echo.tetrislan.render.LayoutState;
+import com.echo.tetrislan.render.MenuRenderer;
 import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.net.PeerInfo;
@@ -46,6 +47,7 @@ public class TetrisView extends View implements Runnable {
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
     public static final String VERSION = "v1.26.0";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -330,7 +332,22 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         c.drawRect(0, 0, w, h, p);
         long now = System.currentTimeMillis();
         if (now < shakeUntil) c.translate((rnd.nextFloat()-.5f)*10f, (rnd.nextFloat()-.5f)*10f);
-        if (menu) { drawMenu(c, w, h); return; }
+        if (menu) {
+            if (menuPage == 2 && p2p == null) {
+                startP2p();
+                p2pDiscovery = true;
+                if ("P2P未启动".equals(p2pStatus)) p2pStatus = "搜索房间中...";
+            }
+            menuRenderer.drawMenu(c, w, h, theme(), VERSION, menuPage,
+                modeName(), sp.contains(saveKey()),
+                roomName, playerName, p2pStatus, lastRoomName,
+                isHost, selfReady,
+                readyCount(), playerCount(), botCount(), canHostStart(),
+                p2p, p2pDiscovery,
+                foundRooms, peerNames, readyPeers, chat,
+                pendingStartAt, MAX_PLAYERS);
+            return;
+        }
         layoutGame(w, h);
         drawTop(c);
         if (invisible && !over) {
@@ -389,169 +406,6 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
         if (paused && !over) drawCenter(c, "暂停", "点暂停继续");
         if (settings) drawSettings(c, w, h);
-    }
-
-    private void drawMenu(Canvas c, int w, int h) {
-        p.setTextAlign(Paint.Align.CENTER);
-        p.setColor(theme().text); p.setTextSize(56); c.drawText("俄罗斯方块 " + VERSION, w/2f, h*0.16f, p);
-        if (menuPage == 0) {
-            drawMenuButton(c, "单人模式", w*0.14f, h*0.30f, w*0.86f, h*0.39f, false);
-            drawMenuButton(c, "多人模式", w*0.14f, h*0.43f, w*0.86f, h*0.52f, false);
-            p.setColor(theme().textMuted); p.setTextSize(28);
-            c.drawText("先选模式，再开局/读取/保存", w/2f, h*0.60f, p);
-            return;
-        }
-        if (menuPage == 3) {
-            p.setColor(theme().score); p.setTextSize(36); c.drawText(modeName(), w/2f, h*0.20f, p);
-            drawMenuButton(c, "新游戏", w*0.14f, h*0.30f, w*0.86f, h*0.39f, false);
-            drawMenuButton(c, "读取存档", w*0.14f, h*0.43f, w*0.86f, h*0.52f, false);
-            drawMenuButton(c, "返回模式选择", w*0.14f, h*0.56f, w*0.86f, h*0.65f, false);
-            p.setColor(theme().textMuted); p.setTextSize(24);
-            c.drawText(sp.contains(saveKey()) ? "当前模式已有独立存档" : "当前模式暂无存档", w/2f, h*0.73f, p);
-            return;
-        }
-        if (menuPage == 4) {
-            p.setColor(theme().score); p.setTextSize(36); c.drawText("T-Spin 专项训练", w/2f, h*0.20f, p);
-            float btnH = h * 0.070f, gap = h * 0.018f, sy = h * 0.32f;
-            String[] techs = {"T-Spin Mini", "T-Spin 单", "T-Spin 双"};
-            String[] descs = {"左向Mini: 逆旋小口", "TSS: 右移顺旋", "TSD: 左移顺旋深槽"};
-            for (int i = 0; i < techs.length; i++) {
-                float ty = sy + i * (btnH + gap);
-                drawMenuButton(c, techs[i], w*0.14f, ty, w*0.86f, ty + btnH, false);
-                p.setColor(theme().textMuted); p.setTextSize(18); p.setTextAlign(Paint.Align.RIGHT);
-                c.drawText(descs[i], w*0.82f, ty + btnH * 0.68f, p);
-                p.setTextAlign(Paint.Align.CENTER);
-            }
-            float backY = sy + techs.length * (btnH + gap) + gap * 2;
-            drawMenuButton(c, "返回模式选择", w*0.14f, backY, w*0.86f, backY + btnH, false);
-            p.setColor(theme().textMuted); p.setTextSize(20);
-            c.drawText("游戏中会循环演示：起手 → 移动 → 旋转入位 → 速降", w/2f, backY + btnH + h*0.035f, p);
-            return;
-        }
-        boolean multi = menuPage == 2;
-        if (multi && p2p == null) {
-            startP2p();
-            p2pDiscovery = true;
-            if ("P2P未启动".equals(p2pStatus)) p2pStatus = "搜索房间中...";
-        }
-        p.setColor(theme().score); p.setTextSize(36); c.drawText(multi ? "多人大厅" : "单人模式", w/2f, h*0.20f, p);
-        if (!multi) {
-            float btnH = h * 0.058f, gap = h * 0.010f, sy = h * 0.28f;
-            drawMenuButton(c, "经典 普通", w*0.08f, sy,               w*0.46f, sy+btnH, false);
-            drawMenuButton(c, "经典 高速", w*0.54f, sy,               w*0.92f, sy+btnH, false);
-            drawMenuButton(c, "冲刺40行",  w*0.08f, sy+btnH+gap,      w*0.46f, sy+2*btnH+gap, false);
-            drawMenuButton(c, "限时得分",  w*0.54f, sy+btnH+gap,      w*0.92f, sy+2*btnH+gap, false);
-            drawMenuButton(c, "马拉松",    w*0.08f, sy+2*(btnH+gap),  w*0.46f, sy+3*btnH+2*gap, false);
-            drawMenuButton(c, "隐形模式",  w*0.54f, sy+2*(btnH+gap),  w*0.92f, sy+3*btnH+2*gap, false);
-            drawMenuButton(c, "挖掘挑战",  w*0.08f, sy+3*(btnH+gap),  w*0.46f, sy+4*btnH+3*gap, false);
-            drawMenuButton(c, "技巧训练",  w*0.54f, sy+3*(btnH+gap),  w*0.92f, sy+4*btnH+3*gap, false);
-            float by = sy + 4*(btnH+gap) + gap*2;
-            drawMenuButton(c, "返回主菜单", w*0.14f, by,               w*0.86f, by+btnH, false);
-            p.setColor(theme().textMuted); p.setTextSize(20);
-            float descY = by + btnH + h*0.025f;
-            c.drawText("经典普通:可存档  经典高速:原生存模式  冲刺:竞速40行  限时:2分钟得分", w/2f, descY, p);
-            c.drawText("马拉松:150行  隐形:动态显形+边缘/空缺提示  挖掘:清除垃圾行  训练:技巧练习", w/2f, descY + h*0.028f, p);
-            return;
-        }
-        if (p2p == null || p2pDiscovery) {
-            drawMenuButton(c, "创建房间", w*0.08f, h*0.31f, w*0.46f, h*0.39f, false);
-            drawMenuButton(c, "输入房号", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
-            if (lastRoomName != null) {
-                drawMenuButton(c, "重连上一局", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
-                drawMenuButton(c, "修改名称", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
-            } else {
-                drawMenuButton(c, "修改名称", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
-            }
-            drawMenuButton(c, "返回主菜单", w*0.15f, h*0.53f, w*0.85f, h*0.61f, false);
-        } else {
-            if (isHost) {
-                boolean canStart = canHostStart();
-                drawMenuButton(c, canStart ? "开始游戏" : "等待准备", w*0.08f, h*0.31f, w*0.46f, h*0.39f, canStart);
-            } else {
-                drawMenuButton(c, selfReady ? "取消准备" : "准备", w*0.08f, h*0.31f, w*0.46f, h*0.39f, selfReady);
-            }
-            drawMenuButton(c, "聊天", w*0.54f, h*0.31f, w*0.92f, h*0.39f, false);
-            drawMenuButton(c, "修改名称", w*0.08f, h*0.42f, w*0.46f, h*0.50f, false);
-            drawMenuButton(c, "退出房间", w*0.54f, h*0.42f, w*0.92f, h*0.50f, false);
-            if (isHost) {
-                int bc = botCount();
-                if (playerCount() < MAX_PLAYERS) {
-                    drawMenuButton(c, "+电脑", w*0.08f, h*0.53f, w*0.46f, h*0.61f, false);
-                }
-                if (bc > 0) {
-                    drawMenuButton(c, "-电脑", w*0.54f, h*0.53f, w*0.92f, h*0.61f, false);
-                } else if (!peerNames.isEmpty()) {
-                    drawMenuButton(c, "踢人", w*0.54f, h*0.53f, w*0.92f, h*0.61f, false);
-                }
-            }
-        }
-        p.setColor(theme().text); p.setTextSize(28);
-        c.drawText("房间 " + roomName + "  准备 " + readyCount() + "/" + playerCount() + "  2-" + MAX_PLAYERS + "人", w/2f, h*0.68f, p);
-        if (p2p != null && !p2pDiscovery) {
-            p.setColor(theme().score); p.setTextSize(28);
-            c.drawText("玩家: " + playerName + (isHost ? "[房主]" : ""), w/2f, h*0.72f, p);
-            int py = 0;
-            for (java.util.Map.Entry<String, String> e : peerNames.entrySet()) {
-                String name = e.getValue();
-                boolean isBot = name.startsWith("BOT_");
-                String tag = isBot ? " [电脑]" : (readyPeers.getOrDefault(e.getKey(), false) ? " [已准备]" : "");
-                c.drawText(name + tag, w/2f, h*(0.755f + 0.035f*py), p);
-                py++;
-            }
-        } else {
-            p.setColor(theme().textMuted); p.setTextSize(24);
-            c.drawText("玩家: " + playerName, w/2f, h*0.56f, p);
-            int nf = foundRooms.size();
-            p.setColor(theme().textMuted); p.setTextSize(22);
-            if (nf == 0) {
-                c.drawText("正在搜索附近的房间...", w/2f, h*0.60f, p);
-            } else {
-                c.drawText("—— 附近的房间 ——", w/2f, h*0.59f, p);
-                float cardY = h*0.612f, cardH = h*0.058f, cardGap = h*0.008f, cardL = w*0.06f, cardR = w*0.94f;
-                p.setTextAlign(Paint.Align.LEFT);
-                int limit = Math.min(nf, 4);
-                for (int i = 0; i < limit; i++) {
-                    DiscoveredRoom dr = foundRooms.get(i);
-                    float cy = cardY + i * (cardH + cardGap);
-                    p.setColor(theme().btn); p.setStyle(Paint.Style.FILL);
-                    c.drawRoundRect(new RectF(cardL, cy, cardR, cy+cardH), 12, 12, p);
-                    p.setColor(theme().boardStroke); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1);
-                    c.drawRoundRect(new RectF(cardL+1, cy+1, cardR-1, cy+cardH-1), 11, 11, p);
-                    p.setStyle(Paint.Style.FILL);
-                    p.setColor(theme().score);
-                    c.drawRoundRect(new RectF(cardL, cy, cardL+4, cy+cardH), 2, 2, p);
-                    p.setColor(theme().text); p.setTextSize(24);
-                    c.drawText(dr.room, cardL+14, cy+16, p);
-                    p.setColor(theme().textMuted); p.setTextSize(18);
-                    c.drawText("房主: " + dr.name, cardL+14, cy+cardH-8, p);
-                    p.setTextAlign(Paint.Align.CENTER);
-                    p.setColor(theme().score); p.setTextSize(26);
-                    c.drawText("→", cardR-28, cy+cardH/2+9, p);
-                    p.setTextAlign(Paint.Align.LEFT);
-                }
-                p.setTextAlign(Paint.Align.CENTER);
-                p.setColor(theme().textMuted); p.setTextSize(18);
-                c.drawText("发现 " + nf + " 个房间 · 点击房间加入", w/2f, cardY + limit*(cardH+cardGap) + h*0.010f, p);
-            }
-        }
-        p.setColor(theme().textMuted); p.setTextSize(24);
-        c.drawText(p2pStatus, w/2f, h*0.84f, p);
-        int start = Math.max(0, chat.size() - 4);
-        for (int i=start;i<chat.size();i++) c.drawText(chat.get(i), w/2f, h*(0.875f + 0.035f*(i-start)), p);
-        if (pendingStartAt > 0) {
-            long left = Math.max(0, (pendingStartAt - System.currentTimeMillis() + 999) / 1000);
-            p.setColor(theme().score); p.setTextSize(42); c.drawText("倒计时 " + left, w/2f, h*0.96f, p);
-        }
-    }
-
-    private void drawMenuButton(Canvas c, String text, float l, float t, float r, float b, boolean on) {
-        p.setStyle(Paint.Style.FILL); p.setColor(on ? theme().btnOn : theme().btn);
-        c.drawRoundRect(new RectF(l,t,r,b), 28, 28, p);
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(3); p.setColor(on ? theme().btnOn : theme().boardStroke);
-        c.drawRoundRect(new RectF(l+2,t+2,r-2,b-2), 26, 26, p);
-        p.setStyle(Paint.Style.FILL);
-        p.setColor(on ? Color.BLACK : theme().text); p.setTextSize(38); p.setTextAlign(Paint.Align.CENTER);
-        c.drawText(text, (l+r)/2, (t+b)/2 + 13, p);
     }
 
     private void layoutGame(int w, int h) {
@@ -810,11 +664,11 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         p.setColor(theme().bg); c.drawRect(0, 0, w, h, p);
         p.setTextAlign(Paint.Align.CENTER); p.setColor(theme().text); p.setTextSize(46); c.drawText("设置", w/2f, h*0.18f, p);
         if (solo) {
-            drawMenuButton(c, "继续游戏", w*.16f, h*.26f, w*.84f, h*.33f, false);
-            drawMenuButton(c, "读取存档", w*.16f, h*.35f, w*.84f, h*.42f, false);
-            drawMenuButton(c, "手动保存", w*.16f, h*.44f, w*.84f, h*.51f, false);
+            menuRenderer.drawMenuButton(c,  "继续游戏", w*.16f, h*.26f, w*.84f, h*.33f, false, theme());
+            menuRenderer.drawMenuButton(c,  "读取存档", w*.16f, h*.35f, w*.84f, h*.42f, false, theme());
+            menuRenderer.drawMenuButton(c,  "手动保存", w*.16f, h*.44f, w*.84f, h*.51f, false, theme());
         } else {
-            drawMenuButton(c, "继续游戏", w*.16f, h*.32f, w*.84f, h*.40f, false);
+            menuRenderer.drawMenuButton(c,  "继续游戏", w*.16f, h*.32f, w*.84f, h*.40f, false, theme());
         }
         // DAS/ARR/软降调节
         float rowH = h * 0.068f;
@@ -825,10 +679,10 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             float y = sy + i * rowH;
             p.setTextAlign(Paint.Align.LEFT); p.setColor(theme().textMuted); p.setTextSize(26);
             c.drawText(cfg[i][0] + " " + cfg[i][1] + "ms", w*0.18f, y + rowH*0.6f, p);
-            drawMenuButton(c, "-", w*0.60f, y, w*0.60f+btnW, y+rowH*0.85f, false);
-            drawMenuButton(c, "+", w*0.74f, y, w*0.74f+btnW, y+rowH*0.85f, false);
+            menuRenderer.drawMenuButton(c,  "-", w*0.60f, y, w*0.60f+btnW, y+rowH*0.85f, false, theme());
+            menuRenderer.drawMenuButton(c,  "+", w*0.74f, y, w*0.74f+btnW, y+rowH*0.85f, false, theme());
         }
-        drawMenuButton(c, "返回主界面", w*.16f, h*.82f, w*.84f, h*.89f, false);
+        menuRenderer.drawMenuButton(c,  "返回主界面", w*.16f, h*.82f, w*.84f, h*.89f, false, theme());
         if (confirmQuit) {
             p.setColor(0x88000000); c.drawRect(0, 0, w, h, p);
             float dw=w*.78f, dh=h*.30f, dx=(w-dw)/2, dy=(h-dh)/2;
@@ -843,9 +697,9 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             p.setColor(theme().textMuted); p.setTextSize(30);
             c.drawText("是否保存当前游戏进度？", w/2f, dy+dh*.54f, p);
             float qbW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.76f, gap=dw*.05f;
-            drawMenuButton(c, "保存", w/2f-qbW*1.5f-gap, btnY, w/2f-qbW*.5f-gap, btnY+btnH, false);
-            drawMenuButton(c, "不保存", w/2f-qbW/2f, btnY, w/2f+qbW/2f, btnY+btnH, false);
-            drawMenuButton(c, "取消", w/2f+qbW*.5f+gap, btnY, w/2f+qbW*1.5f+gap, btnY+btnH, false);
+            menuRenderer.drawMenuButton(c,  "保存", w/2f-qbW*1.5f-gap, btnY, w/2f-qbW*.5f-gap, btnY+btnH, false, theme());
+            menuRenderer.drawMenuButton(c,  "不保存", w/2f-qbW/2f, btnY, w/2f+qbW/2f, btnY+btnH, false, theme());
+            menuRenderer.drawMenuButton(c,  "取消", w/2f+qbW*.5f+gap, btnY, w/2f+qbW*1.5f+gap, btnY+btnH, false, theme());
         }
     }
 
