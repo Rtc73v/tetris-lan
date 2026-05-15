@@ -5,6 +5,7 @@ import com.echo.tetrislan.render.ColorUtil;
 import com.echo.tetrislan.render.FxParticle;
 import com.echo.tetrislan.render.LayoutState;
 import com.echo.tetrislan.render.BoardRenderer;
+import com.echo.tetrislan.render.FxRenderer;
 import com.echo.tetrislan.render.MenuRenderer;
 import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
@@ -51,6 +52,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
+    private final FxRenderer fxRenderer = new FxRenderer(p);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -372,9 +374,9 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             drawTrainingDemo(c, now);
         }
         drawSide(c);
-        drawParticles(c);
+        fxRenderer.drawParticles(c, particles, now);
         drawBtns(c);
-        drawFxOverlay(c, w, h);
+        fxRenderer.drawFxOverlay(c, w, h, theme(), now, flashUntil, fxUntil, fxText);
         if (over) {
             if (!solo && rankingUntil > 0 && !rankingLines.isEmpty()) {
                 drawRankingOverlay(c, w, h);
@@ -594,29 +596,9 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         p.setColor(0xffaaaaaa); p.setTextSize(28);
         c.drawText("点设置或主界面", w / 2f, top + boxH - 10, p);
     }
-    private void drawParticles(Canvas c) {
-        long now = System.currentTimeMillis();
-        for (int i=particles.size()-1;i>=0;i--) {
-            FxParticle f = particles.get(i);
-            float life = (now - f.born) / 650f;
-            if (life >= 1f) { particles.remove(i); continue; }
-            p.setColor(ColorUtil.applyAlpha(f.color, 1f-life));
-            c.drawCircle(f.x + f.vx*life, f.y + f.vy*life, f.size*(1f-life*.35f), p);
-        }
-    }
 
-    private void drawFxOverlay(Canvas c, int w, int h) {
-        long now = System.currentTimeMillis();
-        if (now < flashUntil) {
-            p.setColor(ColorUtil.applyAlpha(theme().blockFlash, .16f));
-            c.drawRect(0, 0, w, h, p);
-        }
-        if (now < fxUntil && !fxText.isEmpty()) {
-            p.setTextAlign(Paint.Align.CENTER);
-            p.setColor(theme().fxText); p.setTextSize(48);
-            c.drawText(fxText, w/2f, h*.42f, p);
-        }
-    }
+
+
 
     private void fx(String text, boolean strong) {
         fxText = text; fxUntil = System.currentTimeMillis() + 850; flashUntil = System.currentTimeMillis() + (strong ? 260 : 140);
