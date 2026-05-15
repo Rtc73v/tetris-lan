@@ -15,6 +15,7 @@ import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
 
 import com.echo.tetrislan.core.Piece;
+import com.echo.tetrislan.core.GameClock;
 import com.echo.tetrislan.SoloModeController;
 
 import android.app.AlertDialog;
@@ -263,10 +264,10 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                 start(seed);
             }
             if (!menu && !over && !paused && (solo ? !settings : true)) {
-                if (solo && gameMode == MODE_ULTRA && modeElapsedMs(now) >= Math.max(60000, 120000 - (soloStage - 1) * 15000)) {
+                if (solo && gameMode == MODE_ULTRA && GameClock.elapsed(now, modeStartAt, pausedTotalMs, paused, pauseStartedAt) >= Math.max(60000, 120000 - (soloStage - 1) * 15000)) {
                     if (score < soloStage * 5000) finishGame("时间到 未达标");
                 }
-                if (solo && gameMode == MODE_DIG && modeElapsedMs(now) >= 180000) {
+                if (solo && gameMode == MODE_DIG && GameClock.elapsed(now, modeStartAt, pausedTotalMs, paused, pauseStartedAt) >= 180000) {
                     if (digCleared < digTargetLines) finishGame("时间到 未达标");
                 }
                 if (solo && gameMode == MODE_TRAINING && trainResetAt > 0) {
@@ -1308,11 +1309,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         paused = value;
     }
 
-    private long modeElapsedMs(long now) {
-        if (modeStartAt <= 0) return 0;
-        long extraPause = paused && pauseStartedAt > 0 ? now - pauseStartedAt : 0;
-        return Math.max(0, now - modeStartAt - pausedTotalMs - extraPause);
-    }
+
 
     private String formatTime(long ms) {
         long sec = Math.max(0, ms / 1000);
@@ -1339,7 +1336,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     }
 
     private String modeProgress() {
-        long elapsed = modeElapsedMs(System.currentTimeMillis());
+        long elapsed = GameClock.elapsed(System.currentTimeMillis(), modeStartAt, pausedTotalMs, paused, pauseStartedAt);
         if (gameMode == MODE_SPRINT) return Math.min(lines, 40 * soloStage) + "/" + (40 * soloStage) + "行 " + formatTime(elapsed);
         if (gameMode == MODE_ULTRA) { long limit = Math.max(60000, 120000 - (soloStage - 1) * 15000); return "剩余 " + formatTime(limit - elapsed) + " 目标 " + (soloStage * 5000) + "分"; }
         if (gameMode == MODE_MARATHON) return Math.min(lines, 150 * soloStage) + "/" + (150 * soloStage) + "行";
@@ -1716,7 +1713,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
             o.put("invisible", invisible);
             o.put("pendingGarbage", pendingGarbage); o.put("combo", combo); o.put("b2b", b2b);
             o.put("badges", badges); o.put("kos", kos); o.put("canHold", canHold);
-            o.put("elapsedMs", modeElapsedMs(System.currentTimeMillis()));
+            o.put("elapsedMs", GameClock.elapsed(System.currentTimeMillis(), modeStartAt, pausedTotalMs, paused, pauseStartedAt));
             o.put("isGarbage", encodeGarbage());
             JSONArray bagArr=new JSONArray(); for(int v:bag) bagArr.put(v);
             o.put("bag", bagArr);
@@ -1859,7 +1856,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
             int realCount = 0;
             int totalLevel = bot.level;
             float realEfficiency = 0; // lines per minute
-            long elapsedMin = Math.max(1, modeElapsedMs(now) / 60000);
+            long elapsedMin = Math.max(1, GameClock.elapsed(now, modeStartAt, pausedTotalMs, paused, pauseStartedAt) / 60000);
             for (PeerInfo pi : peerInfos.values()) {
                 if (!pi.name.startsWith("BOT_")) {
                     totalLevel += pi.level;
