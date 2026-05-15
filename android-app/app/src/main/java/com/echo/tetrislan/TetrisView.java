@@ -1,5 +1,7 @@
 package com.echo.tetrislan;
 
+import com.echo.tetrislan.core.Piece;
+
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -143,16 +145,6 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private float bx, by, cell, bw, bh, topBtnY;
 
-    private static final int[][][] SHAPES = {
-        {},
-        {{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}},
-        {{1,1},{1,1}},
-        {{0,1,0},{1,1,1},{0,0,0}},
-        {{0,1,1},{1,1,0},{0,0,0}},
-        {{1,1,0},{0,1,1},{0,0,0}},
-        {{1,0,0},{1,1,1},{0,0,0}},
-        {{0,0,1},{1,1,1},{0,0,0}}
-    };
     private static final int[] COLORS = {0,0xff00e5ff,0xffffeb3b,0xffe040fb,0xff69f0ae,0xffff5252,0xff448aff,0xffffab40};
 
     private static class Theme {
@@ -2695,5 +2687,4 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
         PeerInfo(String name) { this.name = name; }
     }
     private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }
-    private static class Piece { int type,x=3,y=0,rot=0; boolean spin=false, mini=false; int[][] s; Piece(int t){type=t; s=copy(SHAPES[t]); rot=0;} Piece(JSONObject o)throws Exception{type=o.getInt("type");x=o.getInt("x");y=o.getInt("y");rot=o.optInt("rot",0);JSONArray a=o.getJSONArray("s");s=new int[a.length()][a.length()];for(int r=0;r<a.length();r++){JSONArray row=a.getJSONArray(r);for(int c=0;c<row.length();c++)s[r][c]=row.getInt(c);}} JSONObject json()throws Exception{JSONObject o=new JSONObject();o.put("type",type);o.put("x",x);o.put("y",y);o.put("rot",rot);o.put("spin",spin);o.put("mini",mini);JSONArray a=new JSONArray();for(int[] rr:s){JSONArray row=new JSONArray();for(int v:rr)row.put(v);a.put(row);}o.put("s",a);return o;} static int[][] copy(int[][] m){int[][] n=new int[m.length][m.length];for(int i=0;i<m.length;i++)n[i]=m[i].clone();return n;} }
 }
