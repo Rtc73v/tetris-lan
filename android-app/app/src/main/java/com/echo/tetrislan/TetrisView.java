@@ -1,5 +1,7 @@
 package com.echo.tetrislan;
 
+import com.echo.tetrislan.net.PeerInfo;
+
 import com.echo.tetrislan.core.Piece;
 
 import android.app.AlertDialog;
@@ -2674,17 +2676,6 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
         if (s == null || s.length() < 200) return;
         for (int i = 0; i < 200 && i < s.length(); i++)
             isGarbage[i / 10][i % 10] = s.charAt(i) == '1';
-    }
-    private static class PeerInfo {
-        String name;
-        int score, lines, level, kos, badges;
-        boolean over;
-        long lastUpdateMs;
-        String via;
-        boolean disconnected = false;
-        long disconnectedAt = 0;
-        int[][] board = null;
-        PeerInfo(String name) { this.name = name; }
     }
     private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }
 }
