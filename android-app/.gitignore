@@ -1,0 +1,10 @@
+.gradle/
+app/build/
+build/
+.hermes/
+*.apk
+*.ap_
+*.dex
+*.class
+local.properties
+.DS_Store

@@ -15,12 +15,17 @@ android {
         applicationId 'com.echo.tetrislan'
         minSdk 23
         targetSdk 35
-        versionCode 24
-        versionName '1.9.1'
+        versionCode 55
+        versionName '1.26.0'
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.fixed
+        }
+    }
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "tetrislan_v${variant.versionName}.apk"
         }
     }
 }
