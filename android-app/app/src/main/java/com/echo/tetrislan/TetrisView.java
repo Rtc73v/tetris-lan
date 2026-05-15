@@ -2,6 +2,7 @@ package com.echo.tetrislan;
 
 import com.echo.tetrislan.net.DiscoveredRoom;
 import com.echo.tetrislan.render.FxParticle;
+import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.net.PeerInfo;
 
@@ -147,16 +148,6 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
 
     private static final int[] COLORS = {0,0xff00e5ff,0xffffeb3b,0xffe040fb,0xff69f0ae,0xffff5252,0xff448aff,0xffffab40};
 
-    private static class Theme {
-        String name;
-        int bg, board, boardStroke, blockFlash, btn, btnOn, btnPause, btnTop, text, textMuted, score, fxText;
-        int[] colors;
-        Theme(String n, int bg, int bo, int bs, int bf, int btn, int boN, int bp, int bt, int tx, int tm, int sc, int fx, int[] co) {
-            this.name=n; this.bg=bg; this.board=bo; this.boardStroke=bs; this.blockFlash=bf;
-            this.btn=btn; this.btnOn=boN; this.btnPause=bp; this.btnTop=bt;
-            this.text=tx; this.textMuted=tm; this.score=sc; this.fxText=fx; this.colors=co;
-        }
-    }
     private static final Theme[] THEMES = {
         new Theme("霓虹", 0xff080810, 0xff121220, 0xff2a2a40, 0xffffffff,
             0xcc1e1e30, 0xff00e5ff, 0xffffab40, 0xff252542,
