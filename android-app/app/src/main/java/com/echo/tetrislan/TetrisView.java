@@ -7,6 +7,7 @@ import com.echo.tetrislan.render.LayoutState;
 import com.echo.tetrislan.render.BoardRenderer;
 import com.echo.tetrislan.render.FxRenderer;
 import com.echo.tetrislan.render.InvisibleRenderer;
+import com.echo.tetrislan.render.TrainingRenderer;
 import com.echo.tetrislan.render.MenuRenderer;
 import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
@@ -55,6 +56,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
     private final FxRenderer fxRenderer = new FxRenderer(p);
     private final InvisibleRenderer invisibleRenderer = new InvisibleRenderer();
+    private final TrainingRenderer trainingRenderer = new TrainingRenderer(p);
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -373,7 +375,11 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             }
         }
         if (solo && gameMode == MODE_TRAINING && trainDemoPiece != null && !over && !paused) {
-            drawTrainingDemo(c, now);
+            trainingRenderer.drawTrainingDemo(c, now, layoutState, theme(),
+                trainDemoStartPiece, trainDemoPiece,
+                trainDemoStartX, trainDemoStartY,
+                trainDemoTargetX, trainDemoTargetY,
+                trainDemoRotDir, trainTech);
         }
         drawSide(c);
         fxRenderer.drawParticles(c, particles, now);
@@ -655,84 +661,12 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
 
 
 
-    private float lerp(float a, float b, float k) { return a + (b - a) * Math.max(0f, Math.min(1f, k)); }
-    private String trainDemoMoveText() {
-        int dx = trainDemoTargetX - trainDemoStartX;
-        int dy = trainDemoTargetY - trainDemoStartY;
-        if (dx > 0 && dy > 0) return "2 右移" + dx + "格+下落";
-        if (dx < 0 && dy > 0) return "2 左移" + (-dx) + "格+下落";
-        if (dx > 0) return "2 右移 " + dx + " 格";
-        if (dx < 0) return "2 左移 " + (-dx) + " 格";
-        if (dy > 0) return "2 正常下落";
-        return "2 对齐槽口";
-    }
-    private String trainDemoInputText() {
-        switch (trainTech) {
-            case 0: return "Mini: 下落到小口 -> 逆旋";
-            case 1: return "单: 右移到槽口 -> 顺旋";
-            case 2: return "双: 左移到深槽 -> 顺旋";
-        }
-        return "操作: 下落 -> 旋转 -> 锁定";
-    }
-    private void drawDemoArrow(Canvas c, float sx, float sy, float tx, float ty) {
-        float x1 = bx + (sx + 1.5f) * cell, y1 = by + (sy + 1.5f) * cell;
-        float x2 = bx + (tx + 1.5f) * cell, y2 = by + (ty + 1.5f) * cell;
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * 0.12f)); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(ColorUtil.applyAlpha(0xFFFFFFFF, 0.55f));
-        c.drawLine(x1, y1, x2, y2, p);
-        p.setStrokeCap(Paint.Cap.BUTT); p.setStyle(Paint.Style.FILL);
-        c.drawCircle(x2, y2, Math.max(4, cell * 0.16f), p);
-    }
-    private void drawDemoPieceAt(Canvas c, int type, int[][] shape, float px, float py, float alpha, boolean outline) {
-        float flash = 0.65f + 0.25f * (float)Math.sin(System.currentTimeMillis() / 180.0);
-        int col = theme().colors[type];
-        p.setStyle(Paint.Style.FILL); p.setColor(ColorUtil.applyAlpha(col, alpha * flash));
-        for (int r = 0; r < shape.length; r++) for (int x = 0; x < shape[r].length; x++) if (shape[r][x] != 0) {
-            float l = bx + (px + x) * cell, t = by + (py + r) * cell;
-            c.drawRect(l + 2, t + 2, l + cell - 2, t + cell - 2, p);
-        }
-        if (outline) {
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * 0.14f)); p.setColor(ColorUtil.applyAlpha(0xFFFFFFFF, 0.85f * flash));
-            for (int r = 0; r < shape.length; r++) for (int x = 0; x < shape[r].length; x++) if (shape[r][x] != 0) {
-                float l = bx + (px + x) * cell, t = by + (py + r) * cell;
-                c.drawRect(l + 2, t + 2, l + cell - 2, t + cell - 2, p);
-            }
-        }
-        p.setStyle(Paint.Style.FILL); p.setColor(0xFFFFFFFF);
-        c.drawCircle(bx + (px + shape[0].length / 2f) * cell, by + (py + shape.length / 2f) * cell, cell * 0.13f, p);
-    }
 
-    private void drawTrainingDemo(Canvas c, long now) {
-        if (trainDemoStartPiece == null) return;
-        long cycle = 5600L;
-        long t = now % cycle;
-        float x = trainDemoStartX, y = trainDemoStartY;
-        int[][] shape = trainDemoStartPiece.s;
-        String step = "1 起手";
-        if (t >= 1400 && t < 2800) {
-            float k = (t - 1400) / 1400f;
-            x = lerp(trainDemoStartX, trainDemoTargetX, k);
-            y = lerp(trainDemoStartY, trainDemoTargetY, k);
-            step = trainDemoMoveText();
-        } else if (t >= 2800 && t < 4200) {
-            x = trainDemoTargetX;
-            y = trainDemoTargetY;
-            float k = (t - 2800) / 1400f;
-            shape = k < 0.55f ? trainDemoStartPiece.s : trainDemoPiece.s;
-            step = trainDemoRotDir > 0 ? "3 顺旋入位" : "3 逆旋入位";
-        } else if (t >= 4200) {
-            x = trainDemoTargetX;
-            y = trainDemoTargetY;
-            shape = trainDemoPiece.s;
-            step = "4 速降锁定";
-        }
-        drawDemoPieceAt(c, trainDemoPiece.type, trainDemoPiece.s, trainDemoTargetX, trainDemoTargetY, 0.20f, true);
-        drawDemoPieceAt(c, trainDemoPiece.type, shape, x, y, 0.36f, true);
-        drawDemoArrow(c, trainDemoStartX, trainDemoStartY, trainDemoTargetX, trainDemoTargetY);
-        p.setStyle(Paint.Style.FILL); p.setTextAlign(Paint.Align.LEFT); p.setTextSize(24); p.setColor(theme().score);
-        c.drawText(step, bx + 8, by + bh - 12, p);
-        p.setColor(theme().text); p.setTextSize(20);
-        c.drawText(trainDemoInputText(), bx + 112, by + bh - 12, p);
-    }
+
+
+
+
+
 
     // ===== 隐形模式动态显形 =====
     private long invisibleRevealMs() {
@@ -1428,7 +1362,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             return "行 " + lines + " " + formatTime(elapsed) + "\n显形 " + String.format(Locale.US, "%.1f", invisibleRevealMs()/1000f) + "s 辅助 " + assist;
         }
         if (gameMode == MODE_DIG) return digCleared + "/" + digTargetLines + "行 " + formatTime(elapsed);
-        if (gameMode == MODE_TRAINING) return "成功 " + trainSuccess + " 次\n" + trainDemoInputText() + (trainFailText.isEmpty() ? "" : "\n" + trainFailText);
+        if (gameMode == MODE_TRAINING) return "成功 " + trainSuccess + " 次\n" + TrainingRenderer.trainDemoInputText(trainTech) + (trainFailText.isEmpty() ? "" : "\n" + trainFailText);
         return "时间 " + formatTime(elapsed) + (classicSpeed==1 ? " 高速" : "");
     }
 
