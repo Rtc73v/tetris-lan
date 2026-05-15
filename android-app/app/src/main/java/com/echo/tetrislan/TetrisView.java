@@ -2,6 +2,7 @@ package com.echo.tetrislan;
 
 import com.echo.tetrislan.net.DiscoveredRoom;
 import com.echo.tetrislan.render.FxParticle;
+import com.echo.tetrislan.render.LayoutState;
 import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.net.PeerInfo;
@@ -145,6 +146,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private int batteryPct = -1;
     private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private float bx, by, cell, bw, bh, topBtnY;
+    private final LayoutState layoutState = new LayoutState();
 
     private static final int[] COLORS = {0,0xff00e5ff,0xffffeb3b,0xffe040fb,0xff69f0ae,0xffff5252,0xff448aff,0xffffab40};
 
@@ -577,6 +579,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             addBtn("暂停", 6, sideX, by + bh - bhBtn*1.62f, sideW, bhBtn);
         }
         addBtn("暂存", 7, sideX, by + bh - bhBtn*.52f, sideW, bhBtn);
+        layoutState.bx = bx; layoutState.by = by; layoutState.bw = bw; layoutState.bh = bh;
+        layoutState.cell = cell; layoutState.sideX = sideX; layoutState.sideW = sideW;
     }
 
     private void addBtn(String text, int action, float cx, float cy, float w, float h) { btns.add(new Btn(text, action, new RectF(cx-w/2, cy-h/2, cx+w/2, cy+h/2))); }
