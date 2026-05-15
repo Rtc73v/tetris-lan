@@ -1,5 +1,8 @@
 package com.echo.tetrislan;
 
+import com.echo.tetrislan.net.DiscoveredRoom;
+import com.echo.tetrislan.render.FxParticle;
+import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.net.PeerInfo;
 
 import com.echo.tetrislan.core.Piece;
@@ -55,11 +58,6 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private String lastRoomName = null;
     private String lastRoomHost = null;
     private String roomHost = null;
-    private static class DiscoveredRoom {
-        String room, host, name;
-        long lastSeenMs;
-        DiscoveredRoom(String r, String h, String n) { room=r; host=h; name=n; lastSeenMs=System.currentTimeMillis(); }
-    }
     private final List<DiscoveredRoom> foundRooms = new ArrayList<>();
     private boolean p2pDiscovery = false;
     private boolean selfReady = false;
@@ -2115,7 +2113,6 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
     private int[][] board(JSONArray a)throws Exception{ int[][] b=new int[R][C]; for(int y=0;y<R;y++){JSONArray row=a.getJSONArray(y); for(int x=0;x<C;x++) b[y][x]=row.getInt(x);} return b; }
 
     private interface TextDone { void apply(String text); }
-    private static class FxParticle { float x,y,vx,vy,size; int color; long born=System.currentTimeMillis(); FxParticle(float x,float y,float vx,float vy,int color,float size){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.color=color;this.size=size;} }
     private static class BotPlayer {
         String name;
         String hostKey;
@@ -2677,5 +2674,4 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
         for (int i = 0; i < 200 && i < s.length(); i++)
             isGarbage[i / 10][i % 10] = s.charAt(i) == '1';
     }
-    private static class Btn { String text; int action; RectF r; Btn(String t,int a,RectF rr){text=t;action=a;r=rr;} }
 }
