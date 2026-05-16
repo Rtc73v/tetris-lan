@@ -14,6 +14,7 @@ import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
 import com.echo.tetrislan.net.BotPlayer;
+import com.echo.tetrislan.net.P2pTransport;
 
 import com.echo.tetrislan.core.Piece;
 import com.echo.tetrislan.core.GameClock;
@@ -57,7 +58,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.20";
+    public static final String VERSION = "v1.26.21";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);

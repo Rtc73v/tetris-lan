@@ -1,4 +1,4 @@
-package com.echo.tetrislan;
+package com.echo.tetrislan.net;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
