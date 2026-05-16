@@ -1,4 +1,6 @@
-package com.echo.tetrislan;
+package com.echo.tetrislan.ui;
+
+import com.echo.tetrislan.TetrisView;
 
 public class InputController {
     private final TetrisView tv;

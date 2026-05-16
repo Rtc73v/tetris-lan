@@ -1,4 +1,4 @@
-package com.echo.tetrislan.net;
+package com.echo.tetrislan.ai;
 
 import com.echo.tetrislan.core.Piece;
 import java.util.Random;

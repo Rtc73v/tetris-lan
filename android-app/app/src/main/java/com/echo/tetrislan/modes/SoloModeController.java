@@ -1,4 +1,6 @@
-package com.echo.tetrislan;
+package com.echo.tetrislan.modes;
+
+import com.echo.tetrislan.TetrisView;
 
 import com.echo.tetrislan.core.GameMode;
 

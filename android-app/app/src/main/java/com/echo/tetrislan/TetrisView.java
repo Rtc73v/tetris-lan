@@ -15,12 +15,13 @@ import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
 import com.echo.tetrislan.core.BoardCodec;
 import com.echo.tetrislan.core.Rules;
-import com.echo.tetrislan.net.BotPlayer;
+import com.echo.tetrislan.ai.BotPlayer;
 import com.echo.tetrislan.net.P2pTransport;
 
 import com.echo.tetrislan.core.Piece;
 import com.echo.tetrislan.core.GameClock;
-import com.echo.tetrislan.SoloModeController;
+import com.echo.tetrislan.ui.InputController;
+import com.echo.tetrislan.modes.SoloModeController;
 import com.echo.tetrislan.modes.InvisibleModeController;
 import com.echo.tetrislan.modes.TrainingModeController;
 import com.echo.tetrislan.modes.DigModeController;
@@ -99,7 +100,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private long garbageDueAt = 0;
     private String fxText = "";
     private long fxUntil = 0, shakeUntil = 0, flashUntil = 0;
-    int soloStage = 1;
+    public int soloStage = 1;
     private long rankingUntil = 0;
     private RectF soloOverRestartBtn = null;
     private RectF soloOverRetryBtn = null;
@@ -110,10 +111,10 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private long lastP2pSend = 0;
     private boolean running = true, menu = true, over = true, paused = false, settings = false, confirmQuit = false;
     private boolean newHighScore = false;
-    boolean solo = true;
+    public boolean solo = true;
     private boolean canHold = true;
-    int gameMode = MODE_CLASSIC;
-    int classicSpeed = 0; // 0=普通(经典), 1=高速(原生存)
+    public int gameMode = MODE_CLASSIC;
+    public int classicSpeed = 0; // 0=普通(经典), 1=高速(原生存)
     private long modeStartAt = 0, pauseStartedAt = 0, pausedTotalMs = 0;
     private String finishText = "";
     private boolean invisible = false;
@@ -132,7 +133,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private static final long INVISIBLE_GAP_ON_MS = 700;
     private int digTargetLines = 0;
     private int digCleared = 0;
-    int trainTech = 0;
+    public int trainTech = 0;
     private int trainSuccess = 0;
     private String trainFailText = "";
     private long trainResetAt = 0;
@@ -140,20 +141,20 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private Piece trainDemoStartPiece = null; // 训练模式演示起手
     private int trainDemoStartX = 0, trainDemoStartY = 0, trainDemoTargetX = 0, trainDemoTargetY = 0, trainDemoRotDir = 1;
     private boolean[][] isGarbage;
-    int menuPage = 0; // 0 main, 1 solo actions, 2 multiplayer actions, 3 new/load for solo mode, 4 training technique select
-    int pendingStartMode = MODE_CLASSIC; // mode selected waiting for new/load choice
+    public int menuPage = 0; // 0 main, 1 solo actions, 2 multiplayer actions, 3 new/load for solo mode, 4 training technique select
+    public int pendingStartMode = MODE_CLASSIC; // mode selected waiting for new/load choice
     private int statusBarH = 0;
     private int[][] board = new int[R][C];
     private Piece cur, next;
-    int hold = 0, score = 0, lines = 0, level = 1;
+    public int hold = 0, score = 0, lines = 0, level = 1;
     private long lastDrop = 0, dropMs = 1000, lastSave = 0;
-    long dasMs = 167, arrMs = 33, softMs = 120;
+    public long dasMs = 167, arrMs = 33, softMs = 120;
     private static final long HARD_COOLDOWN_MS = 350;
     private static final long LOCK_DELAY_MS = 500, ARE_MS = 400;
     private static final int MAX_LOCK_RESETS = 15;
-    boolean leftHeld = false, rightHeld = false, softHeld = false;
+    public boolean leftHeld = false, rightHeld = false, softHeld = false;
     private boolean hardReady = true;
-    long leftStart = 0, rightStart = 0, arrAt = 0, softStart = 0, softAt = 0;
+    public long leftStart = 0, rightStart = 0, arrAt = 0, softStart = 0, softAt = 0;
     private long lastHard = 0;
     private int pendingIRS = 0; // 0=none, 1=cw, -1=ccw
     private boolean pendingIHS = false;
@@ -1568,7 +1569,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
     }
 
-    void start() { start(System.currentTimeMillis()); }
+    public void start() { start(System.currentTimeMillis()); }
 
     private void setupTrainingBoard() {
         board = new int[R][C]; score = 0; lines = 0; level = 1; hold = 0; pendingGarbage = 0;
@@ -1637,7 +1638,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private Piece randomPiece(){ if(solo&&gameMode==MODE_TRAINING) return TrainingModeController.trainNextPiece(trainTech); if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
     private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; if(solo&&gameMode==MODE_TRAINING&&trainDemoStartPiece!=null){cur.x=trainDemoStartX;cur.y=trainDemoStartY;cur.s=TrainingModeController.tShape(trainDemoStartPiece.rot);cur.rot=trainDemoStartPiece.rot;} if(!(solo&&gameMode==MODE_TRAINING))cur.rot=0; cur.spin=false; cur.mini=false; lastActionWasRotate=false; onGround=false; canHold=true; if(invisible){ invisiblePreviewUntil=System.currentTimeMillis()+Math.min(1200+Math.max(0,(int)((700-dropMs)*0.5f)),2500); }        if(!ok(cur,0,0,cur.s)){ if(!solo){ if(pendingGarbage>0&&!lastAttacker.isEmpty()) notifyKO(playerName,lastAttacker); finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
-    boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; if(dx!=0) lastActionWasRotate=false; cur.x+=dx; cur.y+=dy; if(dx!=0){ tone(sMove); if(onGround&&lockResets<MAX_LOCK_RESETS){ lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS; lockResets++; } } return true; }
+    public boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; if(dx!=0) lastActionWasRotate=false; cur.x+=dx; cur.y+=dy; if(dx!=0){ tone(sMove); if(onGround&&lockResets<MAX_LOCK_RESETS){ lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS; lockResets++; } } return true; }
     private boolean ok(Piece pc,int dx,int dy,int[][] s){ for(int r=0;r<s.length;r++) for(int x=0;x<s[r].length;x++) if(s[r][x]!=0){int xx=pc.x+x+dx, yy=pc.y+r+dy; if(xx<0||xx>=C||yy>=R) return false; if(yy>=0&&board[yy][xx]!=0)return false;} return true; }
     private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int newRot=(cur.rot+(cw?1:3))%4; int idx=cw?cur.rot*2:((cur.rot+3)%4)*2+1; int[][][] table=(cur.type==1)?SRS_I:SRS_JLSTZ; for(int ki=0;ki<table[idx].length;ki++){ int[] k=table[idx][ki]; if(ok(cur,k[0],k[1],ns)){cur.s=ns;cur.x+=k[0];cur.y+=k[1];cur.rot=newRot;cur.spin=(cur.type==3);lastActionWasRotate=(cur.type==3);cur.mini=(cur.type==3&&ki>0&&ki<4);if(onGround&&lockResets<MAX_LOCK_RESETS){lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS;lockResets++;}tone(sRotate);return;} } }
     private int[][] rot(int[][] s, boolean cw){ int n=s.length; int[][] a=new int[n][n]; for(int r=0;r<n;r++) for(int c=0;c<n;c++) if(cw)a[c][n-1-r]=s[r][c]; else a[n-1-c][r]=s[r][c]; return a; }
