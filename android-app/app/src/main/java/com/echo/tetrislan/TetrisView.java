@@ -58,7 +58,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.24";
+    public static final String VERSION = "v1.26.25";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -859,7 +859,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                     reconnectCheckHost = null; reconnectCheckUntil = 0;
                     addChat("系统: 找到目标房间，正在加入");
                 }
-                if (roomName.equals(room) && hostRole && !isHost) roomHost = host;
+                if (roomName.equals(room) && hostRole && !isHost) { roomHost = host; lastRoomHost = host; sp.edit().putString("last_room_host", lastRoomHost).apply(); }
                 if (!roomName.equals(room) && hostRole) {
                     boolean found = false;
                     long now = System.currentTimeMillis();
@@ -957,6 +957,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                     }
                     if (newHost != null) {
                         roomHost = newHost;
+                        lastRoomHost = newHost;
+                        sp.edit().putString("last_room_host", lastRoomHost).apply();
                         addChat("系统: 房主已断开，" + newHostName + " 成为新房主");
                         if (p2p != null && p2p.getLocalAddresses().contains(newHost)) {
                             isHost = true;
