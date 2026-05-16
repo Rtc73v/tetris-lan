@@ -14,6 +14,7 @@ import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
 import com.echo.tetrislan.core.BoardCodec;
+import com.echo.tetrislan.core.SaveManager;
 import com.echo.tetrislan.core.Rules;
 import com.echo.tetrislan.ai.BotPlayer;
 import com.echo.tetrislan.net.P2pTransport;
@@ -58,7 +59,7 @@ import java.util.Map;
 import java.util.Random;
 
 public class TetrisView extends View implements Runnable {
-    private int C = 10, R = 20;
+    public int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
     public static final String VERSION = "v1.26.28";
@@ -70,6 +71,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final TrainingRenderer trainingRenderer = new TrainingRenderer(p);
     private final InputController inputController = new InputController(this);
     private final SoloModeController soloModeController = new SoloModeController(this);
+    private SaveManager saveManager;
     private final Random rnd = new Random();
     private final SharedPreferences sp;
     private final List<Btn> btns = new ArrayList<>();
@@ -94,8 +96,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private long reconnectCheckUntil = 0;
     private long pendingStartAt = 0, pendingStartSeed = 0;
     private final List<String> chat = new ArrayList<>();
-    private int pendingGarbage = 0;
-    private int combo = -1, b2b = 0, badges = 0, kos = 0;
+    public int pendingGarbage = 0;
+    public int combo = -1, b2b = 0, badges = 0, kos = 0;
     private String lastAttacker = "";
     private long garbageDueAt = 0;
     private String fxText = "";
@@ -109,15 +111,15 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private ToneGenerator toneGen;
     private int sMove, sRotate, sDrop, sClear, sTetris, sGarbage, sReady;
     private long lastP2pSend = 0;
-    private boolean running = true, menu = true, over = true, paused = false, settings = false, confirmQuit = false;
+    public boolean running = true, menu = true, over = true, paused = false, settings = false, confirmQuit = false;
     private boolean newHighScore = false;
     public boolean solo = true;
-    private boolean canHold = true;
+    public boolean canHold = true;
     public int gameMode = MODE_CLASSIC;
     public int classicSpeed = 0; // 0=普通(经典), 1=高速(原生存)
-    private long modeStartAt = 0, pauseStartedAt = 0, pausedTotalMs = 0;
-    private String finishText = "";
-    private boolean invisible = false;
+    public long modeStartAt = 0, pauseStartedAt = 0, pausedTotalMs = 0;
+    public String finishText = "";
+    public boolean invisible = false;
     private long invisibleFlashUntil = 0; // 全局闪烁截止时间（消除行时触发）
     private long invisibleNearUntil = 0;  // 落点附近闪烁截止时间（锁定时触发）
     private long invisiblePreviewUntil = 0; // 新方块生成后全板预览截止时间
@@ -131,8 +133,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private static final long INVISIBLE_EDGE_ON_MS = 450;
     private static final long INVISIBLE_GAP_PERIOD_MS = 3500;
     private static final long INVISIBLE_GAP_ON_MS = 700;
-    private int digTargetLines = 0;
-    private int digCleared = 0;
+    public int digTargetLines = 0;
+    public int digCleared = 0;
     public int trainTech = 0;
     private int trainSuccess = 0;
     private String trainFailText = "";
@@ -140,14 +142,14 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private Piece trainDemoPiece = null; // 训练模式目标落点
     private Piece trainDemoStartPiece = null; // 训练模式演示起手
     private int trainDemoStartX = 0, trainDemoStartY = 0, trainDemoTargetX = 0, trainDemoTargetY = 0, trainDemoRotDir = 1;
-    private boolean[][] isGarbage;
+    public boolean[][] isGarbage;
     public int menuPage = 0; // 0 main, 1 solo actions, 2 multiplayer actions, 3 new/load for solo mode, 4 training technique select
     public int pendingStartMode = MODE_CLASSIC; // mode selected waiting for new/load choice
     private int statusBarH = 0;
-    private int[][] board = new int[R][C];
-    private Piece cur, next;
+    public int[][] board = new int[R][C];
+    public Piece cur, next;
     public int hold = 0, score = 0, lines = 0, level = 1;
-    private long lastDrop = 0, dropMs = 1000, lastSave = 0;
+    public long lastDrop = 0, dropMs = 1000, lastSave = 0;
     public long dasMs = 167, arrMs = 33, softMs = 120;
     private static final long HARD_COOLDOWN_MS = 350;
     private static final long LOCK_DELAY_MS = 500, ARE_MS = 400;
@@ -166,8 +168,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private boolean clearing = false;
     private int activeAction = -1;
     private final Map<Integer, Integer> pointerActions = new HashMap<>();
-    private int[] bag = new int[7];
-    private int bagIndex = 7;
+    public int[] bag = new int[7];
+    public int bagIndex = 7;
     private boolean isHost = false;
     private BroadcastReceiver batteryReceiver;
     private int batteryPct = -1;
@@ -227,6 +229,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         dasMs = sp.getLong("das_ms", 167);
         arrMs = sp.getLong("arr_ms", 33);
         softMs = sp.getLong("soft_ms", 120);
+        saveManager = new SaveManager(this, sp);
         p.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD));
         initSound();
         setFocusable(true);
@@ -364,7 +367,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                 if ("P2P未启动".equals(p2pStatus)) p2pStatus = "搜索房间中...";
             }
             menuRenderer.drawMenu(c, w, h, theme(), VERSION, menuPage,
-                modeName(), sp.contains(saveKey()),
+                modeName(), saveManager.hasSave(),
                 roomName, playerName, p2pStatus, lastRoomName,
                 isHost, selfReady,
                 readyCount(), playerCount(), botCount(), canHostStart(),
@@ -768,7 +771,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
         if (menuPage == 3) {
             if (TouchUtil.hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { soloModeController.startMode(pendingStartMode); return true; }
-            if (TouchUtil.hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { if (sp.contains(saveKey())) load(); return true; }
+            if (TouchUtil.hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { if (saveManager.hasSave()) saveManager.load(); return true; }
             if (TouchUtil.hit(x,y,w*.14f,h*.56f,w*.86f,h*.65f)) { menuPage=1; return true; }
             return true;
         }
@@ -823,14 +826,14 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             float dw=w*.78f, dh=h*.28f, dy=(h-dh)/2;
             float btnW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.72f, gap=dw*.05f;
             float bx1=w/2f-btnW*1.5f-gap, bx2=w/2f-btnW/2f, bx3=w/2f+btnW/2f+gap;
-            if (TouchUtil.hit(x,y,bx1,btnY,bx1+btnW,btnY+btnH)) { save(true); confirmQuit=false; goMenu(); return true; }
+            if (TouchUtil.hit(x,y,bx1,btnY,bx1+btnW,btnY+btnH)) { saveManager.save(true); confirmQuit=false; goMenu(); return true; }
             if (TouchUtil.hit(x,y,bx2,btnY,bx2+btnW,btnY+btnH)) { confirmQuit=false; goMenu(); return true; }
             if (TouchUtil.hit(x,y,bx3,btnY,bx3+btnW,btnY+btnH)) { confirmQuit=false; return true; }
             return true;
         }
         if (solo && TouchUtil.hit(x,y,w*.16f,h*.26f,w*.84f,h*.33f)) { settings=false; setPaused(false); return true; }
-        if (solo && TouchUtil.hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { load(); settings=false; return true; }
-        if (solo && TouchUtil.hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { save(true); return true; }
+        if (solo && TouchUtil.hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { saveManager.load(); settings=false; return true; }
+        if (solo && TouchUtil.hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { saveManager.save(true); return true; }
         if (!solo && TouchUtil.hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; return true; }
         // DAS/ARR/软降 点击
         float rowH = h * 0.068f;
@@ -1310,7 +1313,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         return String.format(Locale.getDefault(), "%d:%02d", sec / 60, sec % 60);
     }
 
-    private String modeName() {
+    public String modeName() {
         if (gameMode == MODE_SPRINT) return "冲刺40行";
         if (gameMode == MODE_ULTRA) return "限时得分";
         if (gameMode == MODE_MARATHON) return "马拉松";
@@ -1655,67 +1658,8 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
     private void applyGarbage(){ if(pendingGarbage>0&&garbageDueAt==0)garbageDueAt=System.currentTimeMillis()+1800; if(pendingGarbage<=0||System.currentTimeMillis()<garbageDueAt)return; while(pendingGarbage>0){ for(int y=0;y<R-1;y++) board[y]=board[y+1].clone(); int hole=rnd.nextInt(C); board[R-1]=new int[C]; for(int x=0;x<C;x++) board[R-1][x]=(x==hole)?0:7; pendingGarbage--; } garbageDueAt=0; fx("GARBAGE", true); tone(sGarbage); }
     private void hold(){ if(!canHold||cur==null||over)return; int t=cur.type; lastActionWasRotate=false; if(hold==0){hold=t; spawn();} else {cur=new Piece(hold); cur.x=3; cur.y=0; hold=t;}    if(solo&&gameMode==MODE_TRAINING){if(cur.type==3&&trainTech==0){cur.s=TrainingModeController.tShape(0);cur.rot=0;}else if(cur.type==3&&(trainTech==1||trainTech==2)){cur.s=TrainingModeController.tShape(1);cur.rot=1;}} canHold=false; tone(sReady); }
 
-    private String saveKey() {
-        if (gameMode == MODE_TRAINING) return "save_6_" + trainTech;
-        return "save_" + gameMode + "_" + (gameMode == MODE_CLASSIC ? classicSpeed : 0);
-    }
-
-    private void save(boolean toast) {
-        if(gameMode==MODE_TRAINING){if(toast)Toast.makeText(getContext(),"训练模式无法保存",Toast.LENGTH_SHORT).show();return;}
-        if(!solo||cur==null||over){if(toast)Toast.makeText(getContext(),"当前无法保存",Toast.LENGTH_SHORT).show();return;}
-        try{
-            JSONObject o=new JSONObject();
-            o.put("gameMode", gameMode);
-            o.put("board", arr(board));
-            o.put("cur", cur.json());
-            o.put("next", next.json());
-            o.put("hold", hold);
-            o.put("score", score); o.put("lines", lines); o.put("level", level);
-            o.put("drop", dropMs); o.put("bagIndex", bagIndex);
-            o.put("soloStage", soloStage); o.put("classicSpeed", classicSpeed);
-            o.put("digCleared", digCleared); o.put("digTargetLines", digTargetLines);
-            o.put("invisible", invisible);
-            o.put("pendingGarbage", pendingGarbage); o.put("combo", combo); o.put("b2b", b2b);
-            o.put("badges", badges); o.put("kos", kos); o.put("canHold", canHold);
-            o.put("elapsedMs", GameClock.elapsed(System.currentTimeMillis(), modeStartAt, pausedTotalMs, paused, pauseStartedAt));
-            o.put("isGarbage", DigModeController.encodeGarbage(isGarbage));
-            JSONArray bagArr=new JSONArray(); for(int v:bag) bagArr.put(v);
-            o.put("bag", bagArr);
-            sp.edit().putString(saveKey(), o.toString()).apply();
-            if(toast) Toast.makeText(getContext(), modeName() + " 已保存", Toast.LENGTH_SHORT).show();
-        }catch(Exception e){ if(toast) Toast.makeText(getContext(), "保存失败", Toast.LENGTH_SHORT).show(); }
-    }
-    private void load(){
-        try{
-            String s=sp.getString(saveKey(), null);
-            if(s==null)return;
-            C=10; R=20;
-            JSONObject o=new JSONObject(s);
-            gameMode=o.optInt("gameMode", gameMode);
-            board=board(o.getJSONArray("board"));
-            cur=new Piece(o.getJSONObject("cur"));
-            next=new Piece(o.getJSONObject("next"));
-            hold=o.optInt("hold");
-            score=o.optInt("score"); lines=o.optInt("lines"); level=o.optInt("level",1);
-            dropMs=o.optLong("drop",1000); bagIndex=o.optInt("bagIndex",7);
-            soloStage=o.optInt("soloStage",1); classicSpeed=o.optInt("classicSpeed",classicSpeed);
-            digCleared=o.optInt("digCleared",0); digTargetLines=o.optInt("digTargetLines",0);
-            invisible=o.optBoolean("invisible",false);
-            pendingGarbage=o.optInt("pendingGarbage",0); combo=o.optInt("combo",-1); b2b=o.optInt("b2b",0);
-            badges=o.optInt("badges",0); kos=o.optInt("kos",0); canHold=o.optBoolean("canHold",true);
-            DigModeController.decodeGarbage(isGarbage, o.optString("isGarbage",""));
-            JSONArray bagArr=o.optJSONArray("bag");
-            if(bagArr!=null&&bagArr.length()==7){ for(int i=0;i<7;i++) bag[i]=bagArr.getInt(i); }
-            long elapsed=o.optLong("elapsedMs",0);
-            finishText=""; modeStartAt=System.currentTimeMillis()-elapsed; pausedTotalMs=0; pauseStartedAt=0;
-            over=false; paused=false; settings=false; menu=false;
-        }catch(Exception ignored){}
-    }
     private void initSound(){ try{ toneGen=new ToneGenerator(AudioManager.STREAM_MUSIC, 45); sMove=ToneGenerator.TONE_PROP_BEEP; sRotate=ToneGenerator.TONE_PROP_ACK; sDrop=ToneGenerator.TONE_PROP_NACK; sClear=ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD; sTetris=ToneGenerator.TONE_CDMA_ABBR_ALERT; sGarbage=ToneGenerator.TONE_SUP_ERROR; sReady=ToneGenerator.TONE_PROP_PROMPT; }catch(Exception ignored){} }
     private void tone(int id){ if(toneGen!=null&&id!=0) toneGen.startTone(id, 70); }
-
-    private JSONArray arr(int[][] b)throws Exception{ JSONArray a=new JSONArray(); for(int y=0;y<R;y++){JSONArray row=new JSONArray(); for(int x=0;x<C;x++) row.put(b[y][x]); a.put(row);} return a; }
-    private int[][] board(JSONArray a)throws Exception{ int[][] b=new int[R][C]; for(int y=0;y<R;y++){JSONArray row=a.getJSONArray(y); for(int x=0;x<C;x++) b[y][x]=row.getInt(x);} return b; }
 
     private interface TextDone { void apply(String text); }
 
