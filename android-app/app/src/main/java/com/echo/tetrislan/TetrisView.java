@@ -23,6 +23,7 @@ import com.echo.tetrislan.core.Piece;
 import com.echo.tetrislan.core.GameClock;
 import com.echo.tetrislan.ui.InputController;
 import com.echo.tetrislan.modes.SoloModeController;
+import com.echo.tetrislan.ui.TouchRouter;
 import com.echo.tetrislan.modes.InvisibleModeController;
 import com.echo.tetrislan.modes.TrainingModeController;
 import com.echo.tetrislan.modes.DigModeController;
@@ -70,27 +71,28 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final InvisibleRenderer invisibleRenderer = new InvisibleRenderer();
     private final TrainingRenderer trainingRenderer = new TrainingRenderer(p);
     private final InputController inputController = new InputController(this);
-    private final SoloModeController soloModeController = new SoloModeController(this);
-    private SaveManager saveManager;
+    private final TouchRouter touchRouter = new TouchRouter(this);
+    public final SoloModeController soloModeController = new SoloModeController(this);
+    public SaveManager saveManager;
     private final Random rnd = new Random();
-    private final SharedPreferences sp;
-    private final List<Btn> btns = new ArrayList<>();
+    public final SharedPreferences sp;
+    public final List<Btn> btns = new ArrayList<>();
     private final List<FxParticle> particles = new ArrayList<>();
     private Thread loop;
-    private P2pTransport p2p;
+    public P2pTransport p2p;
     private String p2pStatus = "P2P未启动";
     private String roomName = "TETRIS";
     private final String roomPass = "1234";
     private String playerName;
     private String playerId;
-    private String lastRoomName = null;
+    public String lastRoomName = null;
     private String lastRoomHost = null;
     private String roomHost = null;
-    private final List<DiscoveredRoom> foundRooms = new ArrayList<>();
-    private boolean p2pDiscovery = false;
+    public final List<DiscoveredRoom> foundRooms = new ArrayList<>();
+    public boolean p2pDiscovery = false;
     private boolean selfReady = false;
     private final Map<String, Boolean> readyPeers = new HashMap<>();
-    private final Map<String, String> peerNames = new java.util.LinkedHashMap<>();
+    public final Map<String, String> peerNames = new java.util.LinkedHashMap<>();
     private final Map<String, PeerInfo> peerInfos = new java.util.LinkedHashMap<>();
     private String reconnectCheckHost = null;
     private long reconnectCheckUntil = 0;
@@ -104,8 +106,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private long fxUntil = 0, shakeUntil = 0, flashUntil = 0;
     public int soloStage = 1;
     private long rankingUntil = 0;
-    private RectF soloOverRestartBtn = null;
-    private RectF soloOverRetryBtn = null;
+    public RectF soloOverRestartBtn = null;
+    public RectF soloOverRetryBtn = null;
     private long lastAnyPeerUpdate = 0;
     private boolean networkFrozen = false;
     private ToneGenerator toneGen;
@@ -166,11 +168,11 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private boolean lastActionWasRotate = false;
     private long areUntil = 0;
     private boolean clearing = false;
-    private int activeAction = -1;
-    private final Map<Integer, Integer> pointerActions = new HashMap<>();
+    public int activeAction = -1;
+    public final Map<Integer, Integer> pointerActions = new HashMap<>();
     public int[] bag = new int[7];
     public int bagIndex = 7;
-    private boolean isHost = false;
+    public boolean isHost = false;
     private BroadcastReceiver batteryReceiver;
     private int batteryPct = -1;
     private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
@@ -696,171 +698,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
 
 
     @Override public boolean onTouchEvent(MotionEvent e) {
-        int masked = e.getActionMasked();
-        if (masked == MotionEvent.ACTION_DOWN || masked == MotionEvent.ACTION_POINTER_DOWN) {
-            int idx = e.getActionIndex();
-            float x=e.getX(idx), y=e.getY(idx);
-            if (menu) return touchMenu(x,y);
-            if (settings) return touchSettings(x, y);
-            if (over && !menu && solo && gameMode != MODE_CLASSIC) {
-                if (soloOverRestartBtn != null && soloOverRestartBtn.contains(x, y)) {
-                    soloStage = 1;
-                    start();
-                    return true;
-                }
-                if (soloOverRetryBtn != null && soloOverRetryBtn.contains(x, y)) {
-                    start();
-                    return true;
-                }
-            }
-            for (Btn b: btns) if (b.r.contains(x,y)) {
-                int pointerId = e.getPointerId(idx);
-                pointerActions.put(pointerId, b.action);
-                activeAction = b.action;
-                pressAction(b.action);
-                return true;
-            }
-            return true;
-        }
-        if (masked == MotionEvent.ACTION_UP || masked == MotionEvent.ACTION_CANCEL || masked == MotionEvent.ACTION_POINTER_UP) {
-            if (masked == MotionEvent.ACTION_CANCEL || masked == MotionEvent.ACTION_UP) {
-                releaseAllActions();
-                return true;
-            }
-            int idx = e.getActionIndex();
-            int pointerId = e.getPointerId(idx);
-            Integer action = pointerActions.remove(pointerId);
-            if (action != null) releaseAction(action);
-            return true;
-        }
-        return true;
+        return touchRouter.onTouchEvent(e);
     }
-
-    private boolean touchMenu(float x, float y) {
-        int w=getWidth(), h=getHeight();
-        if (menuPage == 0) {
-            if (TouchUtil.hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { solo=true; menuPage=1; return true; }
-            if (TouchUtil.hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { solo=false; gameMode=MODE_CLASSIC; invisible=false; menuPage=2; return true; }
-            return true;
-        }
-        if (menuPage == 1) {
-            float btnH = h * 0.058f, gap = h * 0.010f, sy = h * 0.28f;
-            if (TouchUtil.hit(x,y,w*.08f,sy,w*.46f,sy+btnH)) { soloModeController.openSoloMode(MODE_CLASSIC, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy,w*.92f,sy+btnH)) { soloModeController.openSoloMode(MODE_CLASSIC, 1); return true; }
-            if (TouchUtil.hit(x,y,w*.08f,sy+btnH+gap,w*.46f,sy+2*btnH+gap)) { soloModeController.openSoloMode(MODE_SPRINT, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy+btnH+gap,w*.92f,sy+2*btnH+gap)) { soloModeController.openSoloMode(MODE_ULTRA, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.08f,sy+2*(btnH+gap),w*.46f,sy+3*btnH+2*gap)) { soloModeController.openSoloMode(MODE_MARATHON, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy+2*(btnH+gap),w*.92f,sy+3*btnH+2*gap)) { soloModeController.openSoloMode(MODE_INVISIBLE, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.08f,sy+3*(btnH+gap),w*.46f,sy+4*btnH+3*gap)) { soloModeController.openSoloMode(MODE_DIG, 0); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,sy+3*(btnH+gap),w*.92f,sy+4*btnH+3*gap)) { soloModeController.openSoloMode(MODE_TRAINING, 0); return true; }
-            float by = sy + 4*(btnH+gap) + gap*2;
-            if (TouchUtil.hit(x,y,w*.14f,by,w*.86f,by+btnH)) { menuPage=0; return true; }
-            return true;
-        }
-        if (menuPage == 4) {
-            float btnH = h * 0.070f, gap = h * 0.018f, sy = h * 0.32f;
-            for (int i = 0; i < 3; i++) {
-                float ty = sy + i * (btnH + gap);
-                if (TouchUtil.hit(x, y, w*.14f, ty, w*.86f, ty + btnH)) {
-                    trainTech = i; soloModeController.startMode(MODE_TRAINING); return true;
-                }
-            }
-            float backY = sy + 3 * (btnH + gap) + gap * 2;
-            if (TouchUtil.hit(x, y, w*.14f, backY, w*.86f, backY + btnH)) { menuPage = 1; return true; }
-            return true;
-        }
-        if (menuPage == 3) {
-            if (TouchUtil.hit(x,y,w*.14f,h*.30f,w*.86f,h*.39f)) { soloModeController.startMode(pendingStartMode); return true; }
-            if (TouchUtil.hit(x,y,w*.14f,h*.43f,w*.86f,h*.52f)) { if (saveManager.hasSave()) saveManager.load(); return true; }
-            if (TouchUtil.hit(x,y,w*.14f,h*.56f,w*.86f,h*.65f)) { menuPage=1; return true; }
-            return true;
-        }
-        if (p2p == null || p2pDiscovery) {
-            if (TouchUtil.hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) { createRoom(); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askRoom(); return true; }
-            if (lastRoomName != null) {
-                if (TouchUtil.hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { reconnectLastRoom(); return true; }
-                if (TouchUtil.hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { askName(); return true; }
-                if (TouchUtil.hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
-            } else {
-                if (TouchUtil.hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
-                if (TouchUtil.hit(x,y,w*.15f,h*.53f,w*.85f,h*.61f)) { stopP2p(); menuPage=0; return true; }
-            }
-            // 点击发现的房间卡片加入
-            int nf = foundRooms.size();
-            float cardY = h*0.612f, cardH = h*0.058f, cardGap = h*0.008f, cardL = w*0.06f, cardR = w*0.94f;
-            int limit = Math.min(nf, 4);
-            for (int i = 0; i < limit; i++) {
-                float cy = cardY + i * (cardH + cardGap);
-                if (TouchUtil.hit(x,y,cardL,cy,cardR,cy+cardH)) {
-                    DiscoveredRoom dr = foundRooms.get(i);
-                    joinRoom(dr.room, dr.host);
-                    return true;
-                }
-            }
-        } else {
-            if (TouchUtil.hit(x,y,w*.08f,h*.31f,w*.46f,h*.39f)) {
-                if (isHost) { if (canHostStart()) hostStartGame(); return true; }
-                else { toggleReady(); return true; }
-            }
-            if (TouchUtil.hit(x,y,w*.54f,h*.31f,w*.92f,h*.39f)) { askChat(); return true; }
-            if (TouchUtil.hit(x,y,w*.08f,h*.42f,w*.46f,h*.50f)) { askName(); return true; }
-            if (TouchUtil.hit(x,y,w*.54f,h*.42f,w*.92f,h*.50f)) { leaveRoom(); return true; }
-            if (isHost) {
-                int bc = botCount();
-                if (TouchUtil.hit(x,y,w*.08f,h*.53f,w*.46f,h*.61f)) {
-                    if (playerCount() < MAX_PLAYERS) { addBot(); return true; }
-                }
-                if (TouchUtil.hit(x,y,w*.54f,h*.53f,w*.92f,h*.61f)) {
-                    if (bc > 0) { removeBot(); return true; }
-                    else if (!peerNames.isEmpty()) { kickPlayer(); return true; }
-                }
-            }
-        }
-        return true;
-    }
-
-    private boolean touchSettings(float x, float y) {
-        int w=getWidth(), h=getHeight();
-        if (confirmQuit) {
-            float dw=w*.78f, dh=h*.28f, dy=(h-dh)/2;
-            float btnW=dw*.27f, btnH=dh*.22f, btnY=dy+dh*.72f, gap=dw*.05f;
-            float bx1=w/2f-btnW*1.5f-gap, bx2=w/2f-btnW/2f, bx3=w/2f+btnW/2f+gap;
-            if (TouchUtil.hit(x,y,bx1,btnY,bx1+btnW,btnY+btnH)) { saveManager.save(true); confirmQuit=false; goMenu(); return true; }
-            if (TouchUtil.hit(x,y,bx2,btnY,bx2+btnW,btnY+btnH)) { confirmQuit=false; goMenu(); return true; }
-            if (TouchUtil.hit(x,y,bx3,btnY,bx3+btnW,btnY+btnH)) { confirmQuit=false; return true; }
-            return true;
-        }
-        if (solo && TouchUtil.hit(x,y,w*.16f,h*.26f,w*.84f,h*.33f)) { settings=false; setPaused(false); return true; }
-        if (solo && TouchUtil.hit(x,y,w*.16f,h*.35f,w*.84f,h*.42f)) { saveManager.load(); settings=false; return true; }
-        if (solo && TouchUtil.hit(x,y,w*.16f,h*.44f,w*.84f,h*.51f)) { saveManager.save(true); return true; }
-        if (!solo && TouchUtil.hit(x,y,w*.16f,h*.32f,w*.84f,h*.40f)) { settings=false; return true; }
-        // DAS/ARR/软降 点击
-        float rowH = h * 0.068f;
-        float sy = h * 0.55f;
-        float btnW = w * 0.12f;
-        for (int i = 0; i < 3; i++) {
-            float rowY = sy + i * rowH;
-            if (TouchUtil.hit(x,y,w*.60f,rowY,w*.60f+btnW,rowY+rowH*0.85f)) {
-                if (i==0) { dasMs = Math.max(0, dasMs - 10); sp.edit().putLong("das_ms", dasMs).apply(); }
-                else if (i==1) { arrMs = Math.max(0, arrMs - 2); sp.edit().putLong("arr_ms", arrMs).apply(); }
-                else { softMs = Math.max(10, softMs - 10); sp.edit().putLong("soft_ms", softMs).apply(); }
-                return true;
-            }
-            if (TouchUtil.hit(x,y,w*.74f,rowY,w*.74f+btnW,rowY+rowH*0.85f)) {
-                if (i==0) { dasMs = Math.min(500, dasMs + 10); sp.edit().putLong("das_ms", dasMs).apply(); }
-                else if (i==1) { arrMs = Math.min(200, arrMs + 2); sp.edit().putLong("arr_ms", arrMs).apply(); }
-                else { softMs = Math.min(500, softMs + 10); sp.edit().putLong("soft_ms", softMs).apply(); }
-                return true;
-            }
-        }
-        if (TouchUtil.hit(x,y,w*.16f,h*.82f,w*.84f,h*.89f)) {
-            if (!over && !menu) { confirmQuit = true; return true; }
-            goMenu(); return true;
-        }
-        return true;
-    }
-    
 
     private void startP2p() {
         if (p2p != null) return;
@@ -1028,7 +867,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         p2pStatus = "3秒后开始";
     }
 
-    private void createRoom() {
+    public void createRoom() {
         if (p2p != null) {
             if (isHost) { if (p2p != null) p2p.sendDisband(); }
             else { if (p2p != null) p2p.sendLeave(); }
@@ -1042,7 +881,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         addChat("系统: 已创建房间 " + roomName);
     }
 
-    private void askRoom() {
+    public void askRoom() {
         askText("输入房间号", roomName, text -> {
             roomName = clean(text, "TETRIS");
             if (p2p != null) { p2p.sendLeave(); stopP2p(); }
@@ -1053,7 +892,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         });
     }
 
-    private void joinRoom(String room, String host) {
+    public void joinRoom(String room, String host) {
         if (p2p != null) { p2p.sendLeave(); stopP2p(); }
         isHost = false;
         roomName = room;
@@ -1063,7 +902,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         addChat("系统: 加入发现房间 " + roomName);
     }
 
-    private void toggleReady() {
+    public void toggleReady() {
         startP2p();
         selfReady = !selfReady;
         p2p.sendReady(selfReady);
@@ -1074,7 +913,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private void maybeCountdown() {
         // 房主不再自动开局，只是更新状态
     }
-    private boolean canHostStart() {
+    public boolean canHostStart() {
         if (!isHost || pendingStartAt > 0) return false;
         if (!selfReady) return false;
         int pc = playerCount();
@@ -1086,7 +925,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         return true;
     }
 
-    private int playerCount() {
+    public int playerCount() {
         int n = 1;
         long now = System.currentTimeMillis();
         for (PeerInfo pi : peerInfos.values()) {
@@ -1104,7 +943,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         return false;
     }
 
-    private void leaveRoom() {
+    public void leaveRoom() {
         if (!menu && !over && p2p != null) p2p.sendSurrender();
         if (p2p != null) p2p.sendLeave();
         saveLastRoom();
@@ -1121,7 +960,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
     }
 
-    private void reconnectLastRoom() {
+    public void reconnectLastRoom() {
         if (lastRoomName == null) return;
         roomName = lastRoomName;
         roomHost = lastRoomHost;
@@ -1134,7 +973,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         addChat("系统: 尝试重连 " + roomName + "，检测中...");
     }
 
-    private void askName() {
+    public void askName() {
         askText("修改名称", playerName, text -> {
             String v = clean(text, playerName);
             if (v.length() > 8) v = v.substring(0, 8);
@@ -1154,7 +993,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         addChat("系统: 房间已解散");
     }
 
-    private void kickPlayer() {
+    public void kickPlayer() {
         if (!isHost || peerNames.isEmpty()) return;
         String[] items = new String[peerNames.size()];
         final String[] hosts = new String[peerNames.size()];
@@ -1178,7 +1017,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             .show();
     }
 
-    private void askChat() {
+    public void askChat() {
         askText("聊天", "", text -> {
             String t = clean(text, "");
             if (t.isEmpty()) return;
@@ -1216,7 +1055,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         startP2p();
     }
 
-    private void stopP2p() {
+    public void stopP2p() {
         if (p2p != null) { p2p.stop(); p2p = null; }
         p2pStatus = "P2P未启动";
         selfReady = false; readyPeers.clear(); peerNames.clear(); peerInfos.clear(); foundRooms.clear(); p2pDiscovery = false;
@@ -1224,7 +1063,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         bots.clear(); nextBotId = 1;
     }
 
-    private void pressAction(int a) {
+    public void pressAction(int a) {
         long now = System.currentTimeMillis();
         if (a==3) { leftHeld = true; leftStart = now; arrAt = now; move(-1,0); return; }
         if (a==5) { rightHeld = true; rightStart = now; arrAt = now; move(1,0); return; }
@@ -1232,7 +1071,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         act(a);
     }
 
-    private void releaseAction(int a) {
+    public void releaseAction(int a) {
         if (a==3) leftHeld = false;
         if (a==5) rightHeld = false;
         if (a==4) softHeld = false;
@@ -1240,7 +1079,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         activeAction = -1;
     }
 
-    private void releaseAllActions() {
+    public void releaseAllActions() {
         leftHeld = false;
         rightHeld = false;
         softHeld = false;
@@ -1283,7 +1122,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         lastDrop = now;
     }
 
-    private void goMenu() {
+    public void goMenu() {
         menu = true;
         settings = false;
         paused = false;
@@ -1293,7 +1132,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         pendingIHS = false;
     }
 
-    private void setPaused(boolean value) {
+    public void setPaused(boolean value) {
         if (paused == value) return;
         if (!solo && value) return; // 多人模式禁止暂停
         long now = System.currentTimeMillis();
@@ -1666,7 +1505,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
     private final java.util.Map<String, BotPlayer> bots = new java.util.HashMap<>();
     private int nextBotId = 1;
 
-    private int botCount() { return bots.size(); }
+    public int botCount() { return bots.size(); }
     private int realPlayerCount() {
         int n = 1; // self
         for (PeerInfo pi : peerInfos.values()) {
@@ -1675,12 +1514,12 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
         return n;
     }
 
-    private void hostStartGame() {
+    public void hostStartGame() {
         if (!canHostStart()) return;
         syncStart();
     }
 
-    private void addBot() {
+    public void addBot() {
         if (!isHost) return;
         if (playerCount() >= MAX_PLAYERS) return;
         String bname = "BOT_" + nextBotId++;
@@ -1699,7 +1538,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
         addChat("系统: " + bname + " 加入游戲");
     }
 
-    private void removeBot() {
+    public void removeBot() {
         if (!isHost || bots.isEmpty()) return;
         String key = bots.keySet().iterator().next();
         BotPlayer bot = bots.remove(key);
