@@ -1799,7 +1799,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
             bot.iq = Math.min(10, Math.max(3, avgLevel + 2));
             bot.actionSpeed = Math.min(10, Math.max(2, avgLevel + speedAdj));
             // 放慢bot下落速度：基础延迟 + 等级因子减弱 + actionSpeed影响减小
-            bot.dropDelay = Math.max(100, 3200 - bot.level * 120 - bot.actionSpeed * 130);
+            bot.dropDelay = Math.max(1050, Math.min(3600, 4200 - bot.level * 15 - bot.actionSpeed * 7));
 
             // Bot AI tick
             botTick(bot);
@@ -1893,7 +1893,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
                     botLock(bot);
                 }
             }
-            bot.thinkUntil = now + Math.max(80, 1500 - bot.actionSpeed * 100);
+            bot.thinkUntil = now + Math.max(600, 2700 - bot.actionSpeed * 13);
         }
     }
 
