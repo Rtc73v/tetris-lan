@@ -18,6 +18,7 @@ import com.echo.tetrislan.core.Piece;
 import com.echo.tetrislan.core.GameClock;
 import com.echo.tetrislan.SoloModeController;
 import com.echo.tetrislan.modes.InvisibleModeController;
+import com.echo.tetrislan.modes.TrainingModeController;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -54,7 +55,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.15";
+    public static final String VERSION = "v1.26.16";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -276,7 +277,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                         trainResetAt = 0;
                         setupTrainingBoard();
                         spawn();
-                        next = trainNextPiece();
+                        next = TrainingModeController.trainNextPiece(trainTech);
                     }
                 } else if (over) {
                     // Timed modes can finish between piece locks.
@@ -483,7 +484,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         else if (gameMode == MODE_ULTRA) stageInfo = "S" + soloStage + " 目标" + (soloStage * 5000) + "分";
         else if (gameMode == MODE_DIG) stageInfo = "S" + soloStage + " 目标" + (10 * soloStage) + "行";
         else if (gameMode == MODE_MARATHON) stageInfo = "S" + soloStage + " 目标" + (150 * soloStage) + "行";
-        else if (gameMode == MODE_TRAINING) stageInfo = "练习: " + trainTechName();
+        else if (gameMode == MODE_TRAINING) stageInfo = "练习: " + TrainingModeController.trainTechName(trainTech);
         if (!stageInfo.isEmpty()) c.drawText(stageInfo, 12, sy + 100, p);
     }
 
@@ -1300,17 +1301,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         if (gameMode == MODE_MARATHON) return "马拉松";
         if (gameMode == MODE_INVISIBLE) return "隐形模式";
         if (gameMode == MODE_DIG) return "挖掘挑战";
-        if (gameMode == MODE_TRAINING) return "T-Spin训练 " + trainTechName();
+        if (gameMode == MODE_TRAINING) return "T-Spin训练 " + TrainingModeController.trainTechName(trainTech);
         return gameMode==MODE_CLASSIC ? (classicSpeed==1 ? "经典 高速" : "经典 普通") : "经典模式";
-    }
-
-    private String trainTechName() {
-        switch (trainTech) {
-            case 0: return "T-Spin Mini";
-            case 1: return "T-Spin 单";
-            case 2: return "T-Spin 双";
-            default: return "T-Spin";
-        }
     }
 
     private String modeProgress() {
@@ -1583,7 +1575,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                 setDemoTPiece(3, 14, 2, 4, 0, 1);
                 break;
         }
-        next = trainNextPiece();
+        next = TrainingModeController.trainNextPiece(trainTech);
     }
     private void fillRow(int y) { for (int x = 0; x < C; x++) board[y][x] = 7; }
     private void fillRowExcept(int y, int... gaps) {
@@ -1593,22 +1585,13 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             board[y][x] = gap ? 0 : 7;
         }
     }
-    private int[][] tShape(int rot) {
-        switch (rot & 3) {
-            case 1: return new int[][]{{0,1,0},{0,1,1},{0,1,0}};
-            case 2: return new int[][]{{0,0,0},{1,1,1},{0,1,0}};
-            case 3: return new int[][]{{0,1,0},{1,1,0},{0,1,0}};
-            default: return new int[][]{{0,1,0},{1,1,1},{0,0,0}};
-        }
-    }
-    private int[][] iVertical() { return new int[][]{{0,1,0,0},{0,1,0,0},{0,1,0,0},{0,1,0,0}}; }
     private void setDemoTPiece(int targetX, int targetY, int targetRot, int startX, int startY, int rotDir) {
-        trainDemoPiece = new Piece(3); trainDemoPiece.s = tShape(targetRot); trainDemoPiece.rot = targetRot; trainDemoPiece.x = targetX; trainDemoPiece.y = targetY;
+        trainDemoPiece = new Piece(3); trainDemoPiece.s = TrainingModeController.tShape(targetRot); trainDemoPiece.rot = targetRot; trainDemoPiece.x = targetX; trainDemoPiece.y = targetY;
         int startRot = (targetRot + (rotDir > 0 ? 3 : 1)) & 3;
-        trainDemoStartPiece = new Piece(3); trainDemoStartPiece.s = tShape(startRot); trainDemoStartPiece.rot = startRot; trainDemoStartPiece.x = startX; trainDemoStartPiece.y = startY;
+        trainDemoStartPiece = new Piece(3); trainDemoStartPiece.s = TrainingModeController.tShape(startRot); trainDemoStartPiece.rot = startRot; trainDemoStartPiece.x = startX; trainDemoStartPiece.y = startY;
         trainDemoStartX = startX; trainDemoStartY = startY; trainDemoTargetX = targetX; trainDemoTargetY = targetY; trainDemoRotDir = rotDir;
     }
-    private void setDemoIPiece(int x, int y) { trainDemoPiece = new Piece(1); trainDemoPiece.s = iVertical(); trainDemoPiece.rot = 1; trainDemoPiece.x = x; trainDemoPiece.y = y; }
+    private void setDemoIPiece(int x, int y) { trainDemoPiece = new Piece(1); trainDemoPiece.s = TrainingModeController.iVertical(); trainDemoPiece.rot = 1; trainDemoPiece.x = x; trainDemoPiece.y = y; }
     private void setDemoOPiece(int x, int y) { trainDemoPiece = new Piece(2); trainDemoPiece.x = x; trainDemoPiece.y = y; }
     private void addComboRows() {
         // Shift board up by 2 rows, add 2 nearly-complete rows at bottom
@@ -1620,45 +1603,20 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             for (int x = 0; x < C; x++) board[row][x] = (x == gap) ? 0 : 7;
         }
     }
-    private Piece trainNextPiece() {
-        Piece p;
-        switch (trainTech) {
-            case 0:
-                p = new Piece(3);
-                p.s = tShape(0); // Mini 起手朝上，逆时针转成朝左。
-                p.rot = 0;
-                break;
-            case 1: case 2:
-                p = new Piece(3);
-                p.s = tShape(1); // Single/Double 起手朝右，顺时针转成朝下。
-                p.rot = 1;
-                break;
-            default:
-                trainTech = 0;
-                p = new Piece(3);
-                p.s = tShape(0);
-                p.rot = 0;
-                break;
-        }
-        return p;
-    }
     private void start(long seed) { if (!solo) seed = seed ^ playerName.hashCode() ^ playerId.hashCode(); rnd.setSeed(seed); newHighScore=false;        board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; invisibleFlashUntil=0; invisibleNearUntil=0; invisiblePreviewUntil=0; invisibleDangerUntil=0; invisibleNearCY=-1; invisibleNearCX=-1; digTargetLines=0; digCleared=0; trainDemoPiece=null; trainDemoStartPiece=null; trainResetAt=0; trainFailText=""; lastActionWasRotate=false; isGarbage=new boolean[R][C]; C=10; R=20; if(solo&&gameMode==MODE_DIG){digTargetLines=10; for(int y=R-10;y<R;y++){int hole=rnd.nextInt(C); for(int x=0;x<C;x++){board[y][x]=(x==hole)?0:7; isGarbage[y][x]=(x!=hole);}}}if(solo&&gameMode==MODE_CLASSIC&&classicSpeed==1){dropMs=800;} if(solo&&gameMode==MODE_INVISIBLE){invisible=true;}        if(solo&&gameMode==MODE_TRAINING){dropMs=2000;setupTrainingBoard();trainSuccess=0;} particles.clear(); if(!(solo&&gameMode==MODE_TRAINING)) next=randomPiece();if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} if (!solo) { for (BotPlayer bot : bots.values()) { bot.rnd = new Random(seed ^ bot.name.hashCode()); bot.board = new int[20][10]; bot.score = 0; bot.lines = 0; bot.level = 1; bot.over = false; bot.dropDelay = 600; bot.actionSpeed = 3; bot.iq = 5; bot.pendingGarbage = 0; bot.combo = -1; bot.b2b = 0; bot.badges = 0; bot.kos = 0; bot.garbageDueAt = 0; bot.canHold = true; bot.bagIndex = 7; bot.fillBag(); bot.next = bot.randomPiece(); bot.cur = bot.randomPiece(); bot.cur.x = (10 - bot.cur.s[0].length) / 2; bot.cur.y = 0; bot.cur.rot = 0; bot.lastTick = 0; bot.thinkUntil = 0; } }
         lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
-    private Piece randomPiece(){ if(solo&&gameMode==MODE_TRAINING) return trainNextPiece(); if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
+    private Piece randomPiece(){ if(solo&&gameMode==MODE_TRAINING) return TrainingModeController.trainNextPiece(trainTech); if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
-    private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; if(solo&&gameMode==MODE_TRAINING&&trainDemoStartPiece!=null){cur.x=trainDemoStartX;cur.y=trainDemoStartY;cur.s=tShape(trainDemoStartPiece.rot);cur.rot=trainDemoStartPiece.rot;} if(!(solo&&gameMode==MODE_TRAINING))cur.rot=0; cur.spin=false; cur.mini=false; lastActionWasRotate=false; onGround=false; canHold=true; if(invisible){ invisiblePreviewUntil=System.currentTimeMillis()+Math.min(1200+Math.max(0,(int)((700-dropMs)*0.5f)),2500); }        if(!ok(cur,0,0,cur.s)){ if(!solo){ if(pendingGarbage>0&&!lastAttacker.isEmpty()) notifyKO(playerName,lastAttacker); finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
+    private void spawn(){ cur=next==null?randomPiece():next; next=randomPiece(); cur.x=(C-cur.s[0].length)/2; cur.y=0; if(solo&&gameMode==MODE_TRAINING&&trainDemoStartPiece!=null){cur.x=trainDemoStartX;cur.y=trainDemoStartY;cur.s=TrainingModeController.tShape(trainDemoStartPiece.rot);cur.rot=trainDemoStartPiece.rot;} if(!(solo&&gameMode==MODE_TRAINING))cur.rot=0; cur.spin=false; cur.mini=false; lastActionWasRotate=false; onGround=false; canHold=true; if(invisible){ invisiblePreviewUntil=System.currentTimeMillis()+Math.min(1200+Math.max(0,(int)((700-dropMs)*0.5f)),2500); }        if(!ok(cur,0,0,cur.s)){ if(!solo){ if(pendingGarbage>0&&!lastAttacker.isEmpty()) notifyKO(playerName,lastAttacker); finishGame("被KO"); if(p2p!=null){ sendP2pState(); checkMultiFinish(); } } else { finishGame("游戏结束"); } return; } }
     boolean move(int dx,int dy){ if(cur==null||!ok(cur,dx,dy,cur.s)) return false; if(dx!=0) lastActionWasRotate=false; cur.x+=dx; cur.y+=dy; if(dx!=0){ tone(sMove); if(onGround&&lockResets<MAX_LOCK_RESETS){ lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS; lockResets++; } } return true; }
     private boolean ok(Piece pc,int dx,int dy,int[][] s){ for(int r=0;r<s.length;r++) for(int x=0;x<s[r].length;x++) if(s[r][x]!=0){int xx=pc.x+x+dx, yy=pc.y+r+dy; if(xx<0||xx>=C||yy>=R) return false; if(yy>=0&&board[yy][xx]!=0)return false;} return true; }
     private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int newRot=(cur.rot+(cw?1:3))%4; int idx=cw?cur.rot*2:((cur.rot+3)%4)*2+1; int[][][] table=(cur.type==1)?SRS_I:SRS_JLSTZ; for(int ki=0;ki<table[idx].length;ki++){ int[] k=table[idx][ki]; if(ok(cur,k[0],k[1],ns)){cur.s=ns;cur.x+=k[0];cur.y+=k[1];cur.rot=newRot;cur.spin=(cur.type==3);lastActionWasRotate=(cur.type==3);cur.mini=(cur.type==3&&ki>0&&ki<4);if(onGround&&lockResets<MAX_LOCK_RESETS){lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS;lockResets++;}tone(sRotate);return;} } }
     private int[][] rot(int[][] s, boolean cw){ int n=s.length; int[][] a=new int[n][n]; for(int r=0;r<n;r++) for(int c=0;c<n;c++) if(cw)a[c][n-1-r]=s[r][c]; else a[n-1-c][r]=s[r][c]; return a; }
     private int ghostY(){ int y=cur.y; while(ok(cur,0,y-cur.y+1,cur.s)) y++; return y; }
-    private void lock(){ int spinType=checkTSpin(); boolean trainLandedOnTarget=trainingTargetMatched(); boolean lockOut=false; for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy<0) lockOut=true; else board[yy][cur.x+x]=cur.type;} // 隐身模式：落点附近闪现
+    private void lock(){ int spinType=checkTSpin(); boolean trainLandedOnTarget=TrainingModeController.trainingTargetMatched(cur, trainDemoPiece, trainDemoTargetX, trainDemoTargetY); boolean lockOut=false; for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy<0) lockOut=true; else board[yy][cur.x+x]=cur.type;} // 隐身模式：落点附近闪现
         if(invisible&&!lockOut){int cy=0,cx=0,cnt=0;for(int r=0;r<cur.s.length;r++)for(int x2=0;x2<cur.s[r].length;x2++)if(cur.s[r][x2]!=0){cy+=cur.y+r;cx+=cur.x+x2;cnt++;}invisibleNearCY=cnt>0?cy/cnt:-1;invisibleNearCX=cnt>0?cx/cnt:-1;invisibleNearUntil=System.currentTimeMillis()+InvisibleModeController.invisibleRevealMs(level, dropMs, board, R);}
-        if(lockOut){if(solo&&gameMode==MODE_TRAINING){trainResetAt=System.currentTimeMillis()+1000;cur=null;next=trainNextPiece();return;}finishGame("游戏结束");return;} int n=doClear(spinType);        if(solo&&gameMode==MODE_TRAINING){boolean ok=trainSuccess(spinType,n,trainLandedOnTarget);if(ok){trainSuccess++;trainFailText="";fx("✓ "+trainTechName()+" "+trainSuccess,true);}else{trainFailText=trainFailReason(spinType,n,trainLandedOnTarget);fx(trainFailText,false);}trainResetAt=System.currentTimeMillis()+1000;cur=null;next=trainNextPiece();return;} if(checkModeFinish()) return; if(n>0){areUntil=System.currentTimeMillis()+ARE_MS;clearing=true;}else{applyGarbage();spawn();} }
-    private boolean trainSuccess(int spinType, int cleared, boolean onTarget){ switch(trainTech){case 0:return onTarget&&spinType>=1&&cleared==1;case 1:return onTarget&&spinType>=1&&cleared==1;case 2:return onTarget&&spinType>=1&&cleared==2;}return false;}
-    private String trainFailReason(int spinType, int cleared, boolean onTarget){ if(!lastActionWasRotate)return "失败: 最后一步必须旋转"; if(!onTarget)return "失败: 没有转进目标槽"; if(spinType<1)return "失败: T槽角位不对"; if(trainTech==2&&cleared!=2)return "失败: 需要消2行"; if((trainTech==0||trainTech==1)&&cleared!=1)return "失败: 需要消1行"; return "失败: 位置不对"; }
-    private boolean trainingTargetMatched(){ if(!(solo&&gameMode==MODE_TRAINING)||cur==null||trainDemoPiece==null)return true; if(cur.type!=trainDemoPiece.type||cur.x!=trainDemoTargetX||cur.y!=trainDemoTargetY||cur.rot!=trainDemoPiece.rot)return false; for(int r=0;r<cur.s.length;r++)for(int x=0;x<cur.s[r].length;x++){boolean a=cur.s[r][x]!=0; boolean b=r<trainDemoPiece.s.length&&x<trainDemoPiece.s[r].length&&trainDemoPiece.s[r][x]!=0; if(a!=b)return false;} return true; }
-    private int checkTSpin(){ if(cur==null||cur.type!=3||!lastActionWasRotate)return 0; int cx=cur.x+1, cy=cur.y+1, n=0; int[][] pts={{cx-1,cy-1},{cx+1,cy-1},{cx-1,cy+1},{cx+1,cy+1}}; for(int[] q:pts){int x=q[0],y=q[1]; if(x<0||x>=C||y>=R||(y>=0&&board[y][x]!=0))n++;} if(n<3)return 0; return n==4?2:1; }
+        if(lockOut){if(solo&&gameMode==MODE_TRAINING){trainResetAt=System.currentTimeMillis()+1000;cur=null;next=TrainingModeController.trainNextPiece(trainTech);return;}finishGame("游戏结束");return;} int n=doClear(spinType);        if(solo&&gameMode==MODE_TRAINING){boolean ok=TrainingModeController.trainSuccess(trainTech, spinType, n, trainLandedOnTarget);if(ok){trainSuccess++;trainFailText="";fx("✓ "+TrainingModeController.trainTechName(trainTech)+" "+trainSuccess,true);}else{trainFailText=TrainingModeController.trainFailReason(trainTech, lastActionWasRotate, spinType, n, trainLandedOnTarget);fx(trainFailText,false);}trainResetAt=System.currentTimeMillis()+1000;cur=null;next=TrainingModeController.trainNextPiece(trainTech);return;}        if(checkModeFinish()) return; if(n>0){areUntil=System.currentTimeMillis()+ARE_MS;clearing=true;}else{applyGarbage();spawn();} }
+    private int checkTSpin(){if(cur==null||cur.type!=3||!lastActionWasRotate)return 0; int cx=cur.x+1, cy=cur.y+1, n=0; int[][] pts={{cx-1,cy-1},{cx+1,cy-1},{cx-1,cy+1},{cx+1,cy+1}}; for(int[] q:pts){int x=q[0],y=q[1]; if(x<0||x>=C||y>=R||(y>=0&&board[y][x]!=0))n++;} if(n<3)return 0; return n==4?2:1; }
     private int doClear(int spinType){ int n=0; int garbageCleared=0; for(int y=R-1;y>=0;y--){ boolean full=true; for(int x=0;x<C;x++) if(board[y][x]==0){full=false;break;} if(full){ boolean hasGarbage=false; if(solo&&gameMode==MODE_DIG){ for(int x=0;x<C;x++) if(isGarbage[y][x]){hasGarbage=true;break;} } lineBurst(y); for(int yy=y;yy>0;yy--){ board[yy]=board[yy-1].clone(); if(solo&&gameMode==MODE_DIG) isGarbage[yy]=isGarbage[yy-1].clone(); } board[0]=new int[C]; if(solo&&gameMode==MODE_DIG) isGarbage[0]=new boolean[C]; n++; y++; if(solo&&gameMode==MODE_DIG && hasGarbage) garbageCleared++; }}        if(n>0){ invisibleFlashUntil=System.currentTimeMillis()+Math.min(InvisibleModeController.invisibleRevealMs(level, dropMs, board, R)+700, 5000); combo++; boolean difficult=n==4||spinType>=1; if(difficult)b2b++; else b2b=0; int base=new int[]{0,100,300,500,800}[n]; if(spinType==2) base=n==1?800:n==2?1200:1600; else if(spinType==1) base=n==1?200:n==2?400:600; int bonus=combo>0?combo*50:0; score+=(base+bonus)*level; lines+=n; if(solo&&gameMode==MODE_DIG) digCleared+=garbageCleared; if(solo&&gameMode==MODE_MARATHON){level=soloStage;dropMs=Math.max(120,1000-(soloStage-1)*100);}
 else if(solo&&gameMode==MODE_CLASSIC&&classicSpeed==1){level=lines/10+1;dropMs=Math.max(40,1000-(level-1)*130);}
 else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbageFor(n, spinType); if(garbage>0&&pendingGarbage>0){int cancel=Math.min(garbage,pendingGarbage); pendingGarbage-=cancel; garbage-=cancel;}            if(!solo&&p2p!=null&&garbage>0){ p2p.sendGarbage(garbage); for(BotPlayer bot:bots.values()){ if(!bot.over){ bot.pendingGarbage+=garbage; bot.garbageDueAt=System.currentTimeMillis()+1800; bot.lastAttacker=playerName; } } }fx((spinType>=1?(spinType==2?"T-SPIN ":"T-SPIN MINI "):(n==4?"TETRIS ":"CLEAR "))+n+(combo>1?" COMBO "+combo:""), difficult||n>=3); tone(difficult?sTetris:sClear);
@@ -1667,7 +1625,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
     private static int garbageFor(int n, int spinType, int b2b, int combo, int badges){ int g=0; if(spinType==2)g=n==1?2:n==2?4:6; else if(spinType==1)g=n==1?0:n==2?1:2; else if(n==2)g=1; else if(n==3)g=2; else if(n==4)g=4; if(b2b>1&&(spinType>=1||n==4))g++; if(combo>1)g+=(combo<4?1:combo<6?2:3); g += badges/2; return Math.min(g, 4); }
     private void lineBurst(int row){ for(int i=0;i<18;i++) particles.add(new FxParticle(bx+rnd.nextFloat()*bw, by+(row+.5f)*cell, (rnd.nextFloat()-.5f)*bw*.7f, (rnd.nextFloat()-.5f)*90f, theme().blockFlash, 3+rnd.nextFloat()*5)); }
     private void applyGarbage(){ if(pendingGarbage>0&&garbageDueAt==0)garbageDueAt=System.currentTimeMillis()+1800; if(pendingGarbage<=0||System.currentTimeMillis()<garbageDueAt)return; while(pendingGarbage>0){ for(int y=0;y<R-1;y++) board[y]=board[y+1].clone(); int hole=rnd.nextInt(C); board[R-1]=new int[C]; for(int x=0;x<C;x++) board[R-1][x]=(x==hole)?0:7; pendingGarbage--; } garbageDueAt=0; fx("GARBAGE", true); tone(sGarbage); }
-    private void hold(){ if(!canHold||cur==null||over)return; int t=cur.type; lastActionWasRotate=false; if(hold==0){hold=t; spawn();} else {cur=new Piece(hold); cur.x=3; cur.y=0; hold=t;}    if(solo&&gameMode==MODE_TRAINING){if(cur.type==3&&trainTech==0){cur.s=tShape(0);cur.rot=0;}else if(cur.type==3&&(trainTech==1||trainTech==2)){cur.s=tShape(1);cur.rot=1;}} canHold=false; tone(sReady); }
+    private void hold(){ if(!canHold||cur==null||over)return; int t=cur.type; lastActionWasRotate=false; if(hold==0){hold=t; spawn();} else {cur=new Piece(hold); cur.x=3; cur.y=0; hold=t;}    if(solo&&gameMode==MODE_TRAINING){if(cur.type==3&&trainTech==0){cur.s=TrainingModeController.tShape(0);cur.rot=0;}else if(cur.type==3&&(trainTech==1||trainTech==2)){cur.s=TrainingModeController.tShape(1);cur.rot=1;}} canHold=false; tone(sReady); }
 
     private String saveKey() {
         if (gameMode == MODE_TRAINING) return "save_6_" + trainTech;
