@@ -19,6 +19,7 @@ import com.echo.tetrislan.core.GameClock;
 import com.echo.tetrislan.SoloModeController;
 import com.echo.tetrislan.modes.InvisibleModeController;
 import com.echo.tetrislan.modes.TrainingModeController;
+import com.echo.tetrislan.modes.DigModeController;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -55,7 +56,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.16";
+    public static final String VERSION = "v1.26.17";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -1603,7 +1604,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             for (int x = 0; x < C; x++) board[row][x] = (x == gap) ? 0 : 7;
         }
     }
-    private void start(long seed) { if (!solo) seed = seed ^ playerName.hashCode() ^ playerId.hashCode(); rnd.setSeed(seed); newHighScore=false;        board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; invisibleFlashUntil=0; invisibleNearUntil=0; invisiblePreviewUntil=0; invisibleDangerUntil=0; invisibleNearCY=-1; invisibleNearCX=-1; digTargetLines=0; digCleared=0; trainDemoPiece=null; trainDemoStartPiece=null; trainResetAt=0; trainFailText=""; lastActionWasRotate=false; isGarbage=new boolean[R][C]; C=10; R=20; if(solo&&gameMode==MODE_DIG){digTargetLines=10; for(int y=R-10;y<R;y++){int hole=rnd.nextInt(C); for(int x=0;x<C;x++){board[y][x]=(x==hole)?0:7; isGarbage[y][x]=(x!=hole);}}}if(solo&&gameMode==MODE_CLASSIC&&classicSpeed==1){dropMs=800;} if(solo&&gameMode==MODE_INVISIBLE){invisible=true;}        if(solo&&gameMode==MODE_TRAINING){dropMs=2000;setupTrainingBoard();trainSuccess=0;} particles.clear(); if(!(solo&&gameMode==MODE_TRAINING)) next=randomPiece();if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} if (!solo) { for (BotPlayer bot : bots.values()) { bot.rnd = new Random(seed ^ bot.name.hashCode()); bot.board = new int[20][10]; bot.score = 0; bot.lines = 0; bot.level = 1; bot.over = false; bot.dropDelay = 600; bot.actionSpeed = 3; bot.iq = 5; bot.pendingGarbage = 0; bot.combo = -1; bot.b2b = 0; bot.badges = 0; bot.kos = 0; bot.garbageDueAt = 0; bot.canHold = true; bot.bagIndex = 7; bot.fillBag(); bot.next = bot.randomPiece(); bot.cur = bot.randomPiece(); bot.cur.x = (10 - bot.cur.s[0].length) / 2; bot.cur.y = 0; bot.cur.rot = 0; bot.lastTick = 0; bot.thinkUntil = 0; } }
+    private void start(long seed) { if (!solo) seed = seed ^ playerName.hashCode() ^ playerId.hashCode(); rnd.setSeed(seed); newHighScore=false;        board=new int[R][C]; score=0; lines=0; level=1; dropMs=1000; hold=0; pendingGarbage=0; combo=-1; b2b=0; badges=0; kos=0; garbageDueAt=0; areUntil=0; clearing=false; onGround=false; lockUntil=0; lockResets=0; bagIndex=7; releaseAllActions(); canHold=true; over=false; paused=false; settings=false; finishText=""; pausedTotalMs=0; pauseStartedAt=0; modeStartAt=System.currentTimeMillis(); invisible=false; invisibleFlashUntil=0; invisibleNearUntil=0; invisiblePreviewUntil=0; invisibleDangerUntil=0; invisibleNearCY=-1; invisibleNearCX=-1; digTargetLines=0; digCleared=0; trainDemoPiece=null; trainDemoStartPiece=null; trainResetAt=0; trainFailText=""; lastActionWasRotate=false; isGarbage=new boolean[R][C]; C=10; R=20;        if(solo&&gameMode==MODE_DIG){digTargetLines=10; DigModeController.generateDigBoard(board, isGarbage, R, C, rnd);}if(solo&&gameMode==MODE_CLASSIC&&classicSpeed==1){dropMs=800;} if(solo&&gameMode==MODE_INVISIBLE){invisible=true;}        if(solo&&gameMode==MODE_TRAINING){dropMs=2000;setupTrainingBoard();trainSuccess=0;} particles.clear(); if(!(solo&&gameMode==MODE_TRAINING)) next=randomPiece();if(pendingIRS!=0){next.s=rot(next.s,pendingIRS>0);next.rot=(pendingIRS>0)?1:3;pendingIRS=0;} spawn(); if(pendingIHS){pendingIHS=false;hold();} if (!solo) { for (BotPlayer bot : bots.values()) { bot.rnd = new Random(seed ^ bot.name.hashCode()); bot.board = new int[20][10]; bot.score = 0; bot.lines = 0; bot.level = 1; bot.over = false; bot.dropDelay = 600; bot.actionSpeed = 3; bot.iq = 5; bot.pendingGarbage = 0; bot.combo = -1; bot.b2b = 0; bot.badges = 0; bot.kos = 0; bot.garbageDueAt = 0; bot.canHold = true; bot.bagIndex = 7; bot.fillBag(); bot.next = bot.randomPiece(); bot.cur = bot.randomPiece(); bot.cur.x = (10 - bot.cur.s[0].length) / 2; bot.cur.y = 0; bot.cur.rot = 0; bot.lastTick = 0; bot.thinkUntil = 0; } }
         lastDrop=System.currentTimeMillis(); menu=false; tone(sReady); }
     private Piece randomPiece(){ if(solo&&gameMode==MODE_TRAINING) return TrainingModeController.trainNextPiece(trainTech); if(bagIndex>=7) fillBag(); return new Piece(bag[bagIndex++]); }
     private void fillBag(){ for(int i=0;i<7;i++) bag[i]=i+1; for(int i=6;i>0;i--){int j=rnd.nextInt(i+1); int t=bag[i]; bag[i]=bag[j]; bag[j]=t;} bagIndex=0; }
@@ -1650,7 +1651,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
             o.put("pendingGarbage", pendingGarbage); o.put("combo", combo); o.put("b2b", b2b);
             o.put("badges", badges); o.put("kos", kos); o.put("canHold", canHold);
             o.put("elapsedMs", GameClock.elapsed(System.currentTimeMillis(), modeStartAt, pausedTotalMs, paused, pauseStartedAt));
-            o.put("isGarbage", encodeGarbage());
+            o.put("isGarbage", DigModeController.encodeGarbage(isGarbage));
             JSONArray bagArr=new JSONArray(); for(int v:bag) bagArr.put(v);
             o.put("bag", bagArr);
             sp.edit().putString(saveKey(), o.toString()).apply();
@@ -1675,7 +1676,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
             invisible=o.optBoolean("invisible",false);
             pendingGarbage=o.optInt("pendingGarbage",0); combo=o.optInt("combo",-1); b2b=o.optInt("b2b",0);
             badges=o.optInt("badges",0); kos=o.optInt("kos",0); canHold=o.optBoolean("canHold",true);
-            decodeGarbage(o.optString("isGarbage",""));
+            DigModeController.decodeGarbage(isGarbage, o.optString("isGarbage",""));
             JSONArray bagArr=o.optJSONArray("bag");
             if(bagArr!=null&&bagArr.length()==7){ for(int i=0;i<7;i++) bag[i]=bagArr.getInt(i); }
             long elapsed=o.optLong("elapsedMs",0);
@@ -2236,19 +2237,5 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
             b[i / 10][i % 10] = (ch == '.' || ch < '0' || ch > '7') ? 0 : (ch - '0');
         }
         return b;
-    }
-    private String encodeGarbage() {
-        if (isGarbage == null) return "";
-        StringBuilder sb = new StringBuilder(200);
-        for (int r = 0; r < 20; r++)
-            for (int c = 0; c < 10; c++)
-                sb.append(isGarbage[r][c] ? '1' : '0');
-        return sb.toString();
-    }
-    private void decodeGarbage(String s) {
-        isGarbage = new boolean[20][10];
-        if (s == null || s.length() < 200) return;
-        for (int i = 0; i < 200 && i < s.length(); i++)
-            isGarbage[i / 10][i % 10] = s.charAt(i) == '1';
     }
 }
