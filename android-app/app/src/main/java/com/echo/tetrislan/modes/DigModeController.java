@@ -18,8 +18,7 @@ public final class DigModeController {
             isGarbage[i / 10][i % 10] = s.charAt(i) == '1';
     }
 
-    public static void generateDigBoard(int[][] board, boolean[][] isGarbage, int rows, int cols, Random rnd) {
-        int targetLines = 10;
+    public static void generateDigBoard(int[][] board, boolean[][] isGarbage, int rows, int cols, int targetLines, Random rnd) {
         for (int y = rows - targetLines; y < rows; y++) {
             int hole = rnd.nextInt(cols);
             for (int x = 0; x < cols; x++) {
