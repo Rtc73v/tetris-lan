@@ -18,6 +18,7 @@ import com.echo.tetrislan.core.SaveManager;
 import com.echo.tetrislan.core.Rules;
 import com.echo.tetrislan.ai.BotPlayer;
 import com.echo.tetrislan.net.P2pTransport;
+import com.echo.tetrislan.net.TetrisP2pListener;
 
 import com.echo.tetrislan.core.Piece;
 import com.echo.tetrislan.core.GameClock;
@@ -61,7 +62,7 @@ import java.util.Random;
 
 public class TetrisView extends View implements Runnable {
     public int C = 10, R = 20;
-    private static final int MAX_PLAYERS = 3;
+    public static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
     public static final String VERSION = "v1.26.28";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -80,38 +81,38 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private final List<FxParticle> particles = new ArrayList<>();
     private Thread loop;
     public P2pTransport p2p;
-    private String p2pStatus = "P2P未启动";
-    private String roomName = "TETRIS";
-    private final String roomPass = "1234";
-    private String playerName;
-    private String playerId;
+    public String p2pStatus = "P2P未启动";
+    public String roomName = "TETRIS";
+    public final String roomPass = "1234";
+    public String playerName;
+    public String playerId;
     public String lastRoomName = null;
-    private String lastRoomHost = null;
-    private String roomHost = null;
+    public String lastRoomHost = null;
+    public String roomHost = null;
     public final List<DiscoveredRoom> foundRooms = new ArrayList<>();
     public boolean p2pDiscovery = false;
-    private boolean selfReady = false;
-    private final Map<String, Boolean> readyPeers = new HashMap<>();
+    public boolean selfReady = false;
+    public final Map<String, Boolean> readyPeers = new HashMap<>();
     public final Map<String, String> peerNames = new java.util.LinkedHashMap<>();
-    private final Map<String, PeerInfo> peerInfos = new java.util.LinkedHashMap<>();
-    private String reconnectCheckHost = null;
-    private long reconnectCheckUntil = 0;
-    private long pendingStartAt = 0, pendingStartSeed = 0;
+    public final Map<String, PeerInfo> peerInfos = new java.util.LinkedHashMap<>();
+    public String reconnectCheckHost = null;
+    public long reconnectCheckUntil = 0;
+    public long pendingStartAt = 0, pendingStartSeed = 0;
     private final List<String> chat = new ArrayList<>();
     public int pendingGarbage = 0;
     public int combo = -1, b2b = 0, badges = 0, kos = 0;
-    private String lastAttacker = "";
-    private long garbageDueAt = 0;
+    public String lastAttacker = "";
+    public long garbageDueAt = 0;
     private String fxText = "";
     private long fxUntil = 0, shakeUntil = 0, flashUntil = 0;
     public int soloStage = 1;
-    private long rankingUntil = 0;
+    public long rankingUntil = 0;
     public RectF soloOverRestartBtn = null;
     public RectF soloOverRetryBtn = null;
-    private long lastAnyPeerUpdate = 0;
-    private boolean networkFrozen = false;
+    public long lastAnyPeerUpdate = 0;
+    public boolean networkFrozen = false;
     private ToneGenerator toneGen;
-    private int sMove, sRotate, sDrop, sClear, sTetris, sGarbage, sReady;
+    public int sMove, sRotate, sDrop, sClear, sTetris, sGarbage, sReady;
     private long lastP2pSend = 0;
     public boolean running = true, menu = true, over = true, paused = false, settings = false, confirmQuit = false;
     private boolean newHighScore = false;
@@ -635,7 +636,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
 
 
 
-    private void fx(String text, boolean strong) {
+    public void fx(String text, boolean strong) {
         fxText = text; fxUntil = System.currentTimeMillis() + 850; flashUntil = System.currentTimeMillis() + (strong ? 260 : 140);
         if (strong) shakeUntil = System.currentTimeMillis() + 240;
         for (int i=0;i<(strong?34:18);i++) particles.add(new FxParticle(bx+bw/2, by+bh*.45f, (rnd.nextFloat()-.5f)*bw, (rnd.nextFloat()-.75f)*bh*.55f, theme().colors[1+rnd.nextInt(7)], 4+rnd.nextFloat()*7));
@@ -704,152 +705,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     private void startP2p() {
         if (p2p != null) return;
         p2pStatus = "房间广播中";
-        p2p = new P2pTransport(roomName, roomPass, playerName, playerId, isHost, new P2pTransport.Listener() {
-            @Override public void onRoomFound(String room, String host, String name, boolean hostRole) {
-                if (reconnectCheckHost != null && reconnectCheckHost.equals(host)) {
-                    reconnectCheckHost = null; reconnectCheckUntil = 0;
-                    addChat("系统: 找到目标房间，正在加入");
-                }
-                if (roomName.equals(room) && hostRole && !isHost) { roomHost = host; lastRoomHost = host; sp.edit().putString("last_room_host", lastRoomHost).apply(); }
-                if (!roomName.equals(room) && hostRole) {
-                    boolean found = false;
-                    long now = System.currentTimeMillis();
-                    Iterator<DiscoveredRoom> it = foundRooms.iterator();
-                    while (it.hasNext()) {
-                        DiscoveredRoom dr = it.next();
-                        if (now - dr.lastSeenMs > 30000) { it.remove(); continue; }
-                        if (dr.room.equals(room) && dr.host.equals(host)) {
-                            dr.name = name; dr.lastSeenMs = now;
-                            found = true;
-                        }
-                    }
-                    if (!found) foundRooms.add(new DiscoveredRoom(room, host, name));
-                }
-            }
-            @Override public void onPeer(String host, String name, int score, int lines, int level, boolean over, int kos, int badges, String board, String via) {
-                lastAnyPeerUpdate = System.currentTimeMillis();
-                if (networkFrozen) { networkFrozen = false; addChat("系统: 网络恢复，游戏继续"); }
-                if (!acceptPeer(host, name)) return;
-                PeerInfo pi = peerInfos.get(host);
-                if (pi == null) { pi = new PeerInfo(name); peerInfos.put(host, pi); }
-                pi.name = name; pi.score = score; pi.lines = lines; pi.level = level;
-                pi.over = over; pi.kos = kos; pi.badges = badges;
-                pi.lastUpdateMs = System.currentTimeMillis(); pi.via = via;
-                pi.disconnected = false; pi.disconnectedAt = 0;
-                if (board != null && !board.isEmpty()) pi.board = decodeBoard(board);
-                peerNames.put(host, name);
-                p2pStatus = "已连接 " + playerCount() + "/" + MAX_PLAYERS;
-            }
-            @Override public void onReady(String host, String name, boolean ready) {
-                if (!acceptPeer(host, name)) return;
-                peerNames.put(host, name); readyPeers.put(host, ready);
-                addChat("系统: " + name + (ready ? " 已准备" : " 取消准备"));
-                maybeCountdown();
-            }
-            @Override public void onChat(String host, String name, String text) { if (acceptPeer(host, name)) addChat(name + ": " + text); }
-            @Override public void onStart(String host, long seed, long startAt) {
-                if (!fromRoomHost(host)) return;
-                pendingStartSeed = seed; pendingStartAt = startAt; p2pStatus = "3秒后开始";
-            }
-            @Override public void onGarbage(String fromName, int rows) { pendingGarbage += rows; lastAttacker = fromName; garbageDueAt = System.currentTimeMillis() + 1800; p2pStatus = fromName + " 送了 " + rows + " 行"; tone(sGarbage); fx("WARNING +" + rows, true); }
-            @Override public void onKO(String host, String targetName, String killerName) {
-                if (killerName.equals(playerName)) kos++;
-                for (PeerInfo pi : peerInfos.values()) { if (pi.name.equals(killerName)) { pi.kos++; break; } }
-                for (BotPlayer bot : bots.values()) { if (bot.name.equals(killerName)) { bot.kos++; break; } }
-            }
-            @Override public void onLeave(String host, String name) {
-                peerNames.remove(host); readyPeers.remove(host); peerInfos.remove(host);
-                addChat("系统: " + name + " 离开了房间");
-                p2pStatus = p2p == null ? "P2P未启动" : "已连接 " + playerCount() + "/" + MAX_PLAYERS;
-            }
-            @Override public void onKick(String host, String name, String targetName, String reason) {
-                if (!fromRoomHost(host)) return;
-                if (targetName.equals(playerName)) {
-                    stopP2p(); isHost = false;
-                    fx("被踢出", true);
-                    addChat("系统: 你被房主踢出 (" + reason + ")");
-                    return;
-                }
-                for (java.util.Iterator<java.util.Map.Entry<String, String>> it = peerNames.entrySet().iterator(); it.hasNext(); ) {
-                    java.util.Map.Entry<String, String> e = it.next();
-                    if (e.getValue().equals(targetName)) {
-                        it.remove(); readyPeers.remove(e.getKey());
-                        addChat("系统: " + targetName + " 被踢出");
-                        break;
-                    }
-                }
-            }
-            @Override public void onDisband(String host, String name) {
-                if (!fromRoomHost(host)) return;
-                stopP2p(); isHost = false;
-                fx("房间已解散", true);
-                addChat("系统: 房主解散了房间");
-            }
-            @Override public void onDisconnect(String host) {
-                PeerInfo pi = peerInfos.get(host);
-                if (pi != null) {
-                    pi.disconnected = true;
-                    pi.disconnectedAt = System.currentTimeMillis();
-                    addChat("系统: " + pi.name + " 断开连接，30秒内可重连");
-                } else {
-                    String name = peerNames.get(host);
-                    if (name != null) addChat("系统: " + name + " 断开连接");
-                }
-                // 房主断开，选举新房主
-                if (roomHost != null && roomHost.equals(host) && !isHost) {
-                    String newHost = null;
-                    String newHostName = null;
-                    for (java.util.Map.Entry<String, PeerInfo> e : peerInfos.entrySet()) {
-                        if (e.getValue().disconnected) continue;
-                        if (e.getValue().isBot) continue;
-                        newHost = e.getKey();
-                        newHostName = e.getValue().name;
-                        break;
-                    }
-                    if (newHost != null) {
-                        roomHost = newHost;
-                        lastRoomHost = newHost;
-                        sp.edit().putString("last_room_host", lastRoomHost).apply();
-                        addChat("系统: 房主已断开，" + newHostName + " 成为新房主");
-                        if (p2p != null && p2p.getLocalAddresses().contains(newHost)) {
-                            isHost = true;
-                            p2p.setHostRole(true);
-                            addChat("系统: 你已成为新房主");
-                        }
-                    }
-                }
-                p2pStatus = p2p == null ? "P2P未启动" : "已连接 " + playerCount() + "/" + MAX_PLAYERS;
-            }
-            @Override public void onSurrender(String host, String name) {
-                PeerInfo pi = peerInfos.get(host);
-                if (pi != null) { pi.over = true; }
-                addChat("系统: " + name + " 认输");
-                checkMultiFinish();
-            }
-            @Override public void onReturnLobby(String host, String name) {
-                if (!fromRoomHost(host)) return;
-                returnToRoom();
-            }
-            @Override public void onBotState(String host, String botName, int score, int lines, int level, boolean over, int kos, int badges, String board) {
-                PeerInfo pi = peerInfos.get(host);
-                if (pi == null) { pi = new PeerInfo(botName); peerInfos.put(host, pi); }
-                pi.name = botName; pi.score = score; pi.lines = lines; pi.level = level;
-                pi.over = over; pi.kos = kos; pi.badges = badges;
-                if (board != null && !board.isEmpty()) pi.board = decodeBoard(board);
-                pi.lastUpdateMs = System.currentTimeMillis(); pi.via = "bot";
-                lastAnyPeerUpdate = System.currentTimeMillis();
-                peerNames.put(host, botName);
-            }
-            @Override public void onReconnect(String host, String name) {
-                PeerInfo pi = peerInfos.get(host);
-                if (pi != null) {
-                    pi.disconnected = false;
-                    pi.disconnectedAt = 0;
-                }
-                addChat("系统: " + name + " 重新连接");
-            }
-            @Override public void onError(String message) { p2pStatus = "P2P错误"; }
-        });
+        p2p = new P2pTransport(roomName, roomPass, playerName, playerId, isHost, new TetrisP2pListener(this));
         p2p.start();
     }
 
@@ -935,8 +791,8 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     }
     private int readyCount() { int n = selfReady ? 1 : 0; for (Boolean r: readyPeers.values()) if (r) n++; return Math.min(MAX_PLAYERS, n); }
     private boolean isRoomFullForNewPeer(String host) { return !peerNames.containsKey(host) && playerCount() >= MAX_PLAYERS; }
-    private boolean fromRoomHost(String host) { return isHost || roomHost == null || roomHost.equals(host); }
-    private boolean acceptPeer(String host, String name) {
+    public boolean fromRoomHost(String host) { return isHost || roomHost == null || roomHost.equals(host); }
+    public boolean acceptPeer(String host, String name) {
         if (!isRoomFullForNewPeer(host)) return true;
         if (isHost && p2p != null) p2p.sendKick(host, name, "房间已满");
         p2pStatus = "房间已满 " + MAX_PLAYERS + "/" + MAX_PLAYERS;
@@ -1044,12 +900,12 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         return v.isEmpty() ? fallback : v;
     }
 
-    private void addChat(String line) {
+    public void addChat(String line) {
         chat.add(line.length() > 32 ? line.substring(0, 32) : line);
         while (chat.size() > 20) chat.remove(0);
     }
 
-    private void restartP2p() {
+    public void restartP2p() {
         stopP2p();
         selfReady = false; readyPeers.clear(); peerNames.clear(); pendingStartAt = 0; pendingStartSeed = 0;
         startP2p();
@@ -1196,7 +1052,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         for (PeerInfo pi : peerInfos.values()) { if (pi.name.equals(killerName)) { pi.kos++; break; } }
     }
 
-    private void checkMultiFinish() {
+    public void checkMultiFinish() {
         if (solo || p2p == null) return;
         // 检查是否有真人peer
         boolean hasHumanPeer = false;
@@ -1264,7 +1120,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             }
         }
     }
-    private java.util.List<String> rankingLines = new java.util.ArrayList<>();
+    public java.util.List<String> rankingLines = new java.util.ArrayList<>();
     private void showRankingAndReturn() {
         long now = System.currentTimeMillis();
         java.util.List<PeerInfo> all = new java.util.ArrayList<>();
@@ -1289,7 +1145,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         finishText = "对局结束";
         rankingUntil = now + 5000;
     }
-    private void returnToRoom() {
+    public void returnToRoom() {
         menu = true; menuPage = 2; over = false; paused = false; settings = false;
         finishText = ""; rankingUntil = 0; rankingLines.clear();
         selfReady = false; readyPeers.clear(); peerInfos.clear();
@@ -1498,12 +1354,12 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
     private void hold(){ if(!canHold||cur==null||over)return; int t=cur.type; lastActionWasRotate=false; if(hold==0){hold=t; spawn();} else {cur=new Piece(hold); cur.x=3; cur.y=0; hold=t;}    if(solo&&gameMode==MODE_TRAINING){if(cur.type==3&&trainTech==0){cur.s=TrainingModeController.tShape(0);cur.rot=0;}else if(cur.type==3&&(trainTech==1||trainTech==2)){cur.s=TrainingModeController.tShape(1);cur.rot=1;}} canHold=false; tone(sReady); }
 
     private void initSound(){ try{ toneGen=new ToneGenerator(AudioManager.STREAM_MUSIC, 45); sMove=ToneGenerator.TONE_PROP_BEEP; sRotate=ToneGenerator.TONE_PROP_ACK; sDrop=ToneGenerator.TONE_PROP_NACK; sClear=ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD; sTetris=ToneGenerator.TONE_CDMA_ABBR_ALERT; sGarbage=ToneGenerator.TONE_SUP_ERROR; sReady=ToneGenerator.TONE_PROP_PROMPT; }catch(Exception ignored){} }
-    private void tone(int id){ if(toneGen!=null&&id!=0) toneGen.startTone(id, 70); }
+    public void tone(int id){ if(toneGen!=null&&id!=0) toneGen.startTone(id, 70); }
 
     private interface TextDone { void apply(String text); }
 
-    private final java.util.Map<String, BotPlayer> bots = new java.util.HashMap<>();
-    private int nextBotId = 1;
+    public final java.util.Map<String, BotPlayer> bots = new java.util.HashMap<>();
+    public int nextBotId = 1;
 
     public int botCount() { return bots.size(); }
     private int realPlayerCount() {
@@ -1992,7 +1848,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=Rules.
         }
         return sb.toString();
     }
-    private static int[][] decodeBoard(String s) {
+    public static int[][] decodeBoard(String s) {
         if (s == null || s.length() < 200) return null;
         int[][] b = new int[20][10];
         for (int i = 0; i < 200; i++) {
