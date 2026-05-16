@@ -57,7 +57,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.19";
+    public static final String VERSION = "v1.26.20";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -949,7 +949,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                     String newHostName = null;
                     for (java.util.Map.Entry<String, PeerInfo> e : peerInfos.entrySet()) {
                         if (e.getValue().disconnected) continue;
-                        if (e.getValue().name.startsWith("BOT_")) continue;
+                        if (e.getValue().isBot) continue;
                         newHost = e.getKey();
                         newHostName = e.getValue().name;
                         break;
@@ -1064,7 +1064,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         int pc = playerCount();
         if (pc < 2) return false;
         for (java.util.Map.Entry<String, PeerInfo> e : peerInfos.entrySet()) {
-            if (e.getValue().name.startsWith("BOT_")) continue;
+            if (e.getValue().isBot) continue;
             if (!Boolean.TRUE.equals(readyPeers.get(e.getKey()))) return false;
         }
         return true;
@@ -1346,7 +1346,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         // 检查是否有真人peer
         boolean hasHumanPeer = false;
         for (PeerInfo pi : peerInfos.values()) {
-            if (pi.name != null && !pi.name.startsWith("BOT_")) {
+            if (pi.name != null && !pi.isBot) {
                 hasHumanPeer = true;
                 break;
             }
@@ -1364,10 +1364,10 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
             return;
         }
         // 有真人玩家时，只统计真人存活
-        boolean selfIsHuman = playerName == null || !playerName.startsWith("BOT_");
+        boolean selfIsHuman = true;
         int humanAlive = (selfIsHuman && !over) ? 1 : 0;
         for (PeerInfo pi : peerInfos.values()) {
-            if (pi.name != null && !pi.name.startsWith("BOT_") && !pi.over) {
+            if (pi.name != null && !pi.isBot && !pi.over) {
                 humanAlive++;
             }
         }
@@ -1398,7 +1398,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
                 continue;
             }
             // 清理已结束的Bot（无独立网络连接，留在peerInfos仅用于显示）
-            if (pi.name != null && pi.name.startsWith("BOT_") && pi.over) {
+            if (pi.name != null && pi.isBot && pi.over) {
                 String botKey = e.getKey();
                 // 确认Bot实例已不存在才清理
                 if (!bots.containsKey(botKey)) {
@@ -1700,7 +1700,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
     private int realPlayerCount() {
         int n = 1; // self
         for (PeerInfo pi : peerInfos.values()) {
-            if (!pi.name.startsWith("BOT_")) n++;
+            if (!pi.isBot) n++;
         }
         return n;
     }
@@ -1722,7 +1722,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
         bot.cur.x = (10 - bot.cur.s[0].length) / 2;
         bot.cur.y = 0;
         bots.put(bhost, bot);
-        PeerInfo pi = new PeerInfo(bname);
+        PeerInfo pi = new PeerInfo(bname, true);
         pi.name = bname;
         peerInfos.put(bhost, pi);
         peerNames.put(bhost, bname);
@@ -1756,7 +1756,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
             float realEfficiency = 0; // lines per minute
             long elapsedMin = Math.max(1, GameClock.elapsed(now, modeStartAt, pausedTotalMs, paused, pauseStartedAt) / 60000);
             for (PeerInfo pi : peerInfos.values()) {
-                if (!pi.name.startsWith("BOT_")) {
+                if (!pi.isBot) {
                     totalLevel += pi.level;
                     realEfficiency += (float)pi.lines / elapsedMin;
                     realCount++;

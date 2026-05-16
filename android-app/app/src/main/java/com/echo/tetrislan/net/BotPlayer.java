@@ -24,6 +24,7 @@ public class BotPlayer {
     public boolean canHold = true;
     public int bagIndex = 7;
     public int[] bag = new int[7];
+    public boolean isBot = true;
     public Random rnd;
 
     public BotPlayer(String name, String hostKey, long seed) {

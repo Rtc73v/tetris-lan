@@ -9,5 +9,7 @@ public class PeerInfo {
     public boolean disconnected = false;
     public long disconnectedAt = 0;
     public int[][] board = null;
+    public boolean isBot = false;
     public PeerInfo(String name) { this.name = name; }
+    public PeerInfo(String name, boolean isBot) { this.name = name; this.isBot = isBot; }
 }
