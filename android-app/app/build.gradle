@@ -15,8 +15,8 @@ android {
         applicationId 'com.echo.tetrislan'
         minSdk 23
         targetSdk 35
-        versionCode 76
-        versionName '1.26.21'
+        versionCode 77
+        versionName '1.26.22'
     }
     buildTypes {
         debug {
