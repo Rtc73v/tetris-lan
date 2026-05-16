@@ -58,7 +58,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.22";
+    public static final String VERSION = "v1.26.23";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -1062,6 +1062,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
     }
     private boolean canHostStart() {
         if (!isHost || pendingStartAt > 0) return false;
+        if (!selfReady) return false;
         int pc = playerCount();
         if (pc < 2) return false;
         for (java.util.Map.Entry<String, PeerInfo> e : peerInfos.entrySet()) {
@@ -1079,7 +1080,7 @@ private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE
         }
         return Math.min(MAX_PLAYERS, n);
     }
-    private int readyCount() { int n = (!isHost && selfReady) ? 1 : 0; for (Boolean r: readyPeers.values()) if (r) n++; return Math.min(MAX_PLAYERS, n); }
+    private int readyCount() { int n = selfReady ? 1 : 0; for (Boolean r: readyPeers.values()) if (r) n++; return Math.min(MAX_PLAYERS, n); }
     private boolean isRoomFullForNewPeer(String host) { return !peerNames.containsKey(host) && playerCount() >= MAX_PLAYERS; }
     private boolean fromRoomHost(String host) { return isHost || roomHost == null || roomHost.equals(host); }
     private boolean acceptPeer(String host, String name) {
