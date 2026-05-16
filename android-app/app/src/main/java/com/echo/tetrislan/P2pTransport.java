@@ -18,6 +18,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.echo.tetrislan.net.ProtocolMessage;
+
 public class P2pTransport {
     public interface Listener {
         void onRoomFound(String room, String host, String name, boolean hostRole);
@@ -116,19 +118,19 @@ public class P2pTransport {
     }
 
     public void publishBotState(String botName, int score, int lines, int level, boolean over, int kos, int badges, String board) {
-        sendReliable(base("BOT_STATE", botName) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|" + (board == null ? "" : board));
+        sendReliable(base(ProtocolMessage.BOT_STATE, botName) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|" + (board == null ? "" : board));
     }
 
     public void sendReady(boolean ready) {
-        sendReliable(base("READY") + "|" + (ready ? 1 : 0) + "|0|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.READY) + "|" + (ready ? 1 : 0) + "|0|0|0|" + playerId);
     }
 
     public void sendChat(String text) {
-        sendReliable(base("CHAT") + "|" + esc(text) + "|0|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.CHAT) + "|" + esc(text) + "|0|0|0|" + playerId);
     }
 
     public void sendStart(long seed, long startAt) {
-        sendReliable(base("START") + "|" + seed + "|" + startAt + "|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.START) + "|" + seed + "|" + startAt + "|0|0|" + playerId);
     }
 
     public void sendStart(long seed) {
@@ -137,27 +139,27 @@ public class P2pTransport {
 
     public void sendGarbage(int rows) {
         if (rows <= 0) return;
-        sendReliable(base("GARBAGE") + "|" + rows + "|0|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.GARBAGE) + "|" + rows + "|0|0|0|" + playerId);
     }
 
     public void sendKO(String targetName, String killerName) {
-        sendReliable(base("KO") + "|" + esc(targetName) + "|" + esc(killerName) + "|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.KO) + "|" + esc(targetName) + "|" + esc(killerName) + "|0|0|" + playerId);
     }
 
     public void sendLeave() {
-        sendReliable(base("LEAVE") + "|0|0|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.LEAVE) + "|0|0|0|0|" + playerId);
     }
 
     public void sendSurrender() {
-        sendReliable(base("SURRENDER") + "|0|0|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.SURRENDER) + "|0|0|0|0|" + playerId);
     }
 
     public void sendReturnLobby() {
-        sendReliable(base("RETURN_LOBBY") + "|0|0|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.RETURN_LOBBY) + "|0|0|0|0|" + playerId);
     }
 
     public void sendKick(String targetHost, String targetName, String reason) {
-        sendReliable(base("KICK") + "|" + esc(targetName) + "|" + esc(reason) + "|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.KICK) + "|" + esc(targetName) + "|" + esc(reason) + "|0|0|" + playerId);
         synchronized (peers) {
             Peer p = peers.get(targetHost);
             if (p != null) { p.close(); peers.remove(targetHost); }
@@ -165,7 +167,7 @@ public class P2pTransport {
     }
 
     public void sendDisband() {
-        sendReliable(base("DISBAND") + "|0|0|0|0|" + playerId);
+        sendReliable(base(ProtocolMessage.DISBAND) + "|0|0|0|0|" + playerId);
     }
 
     public void setHostRole(boolean hostRole) {
@@ -228,25 +230,25 @@ public class P2pTransport {
         if (localAddresses.contains(host)) return;
         String[] p = split(msg);
         if (p == null) return;
-        if ("HELLO".equals(p[3])) listener.onRoomFound(p[1], host, p[4], parseInt(p[7]) == 1);
+        if (ProtocolMessage.HELLO.equals(p[3])) listener.onRoomFound(p[1], host, p[4], parseInt(p[7]) == 1);
         if (!validRoom(p)) return;
-        if ("HELLO".equals(p[3])) {
+        if (ProtocolMessage.HELLO.equals(p[3])) {
             connectTcp(host);
             return;
         }
-        if ("STATE".equals(p[3])) notifyPeer(host, p, via);
-        if ("READY".equals(p[3])) listener.onReady(host, p[4], parseInt(p[5]) == 1);
-        if ("CHAT".equals(p[3])) listener.onChat(host, p[4], unesc(p[5]));
-        if ("START".equals(p[3])) listener.onStart(host, parseLong(p[5]), parseLong(p[6]));
-        if ("GARBAGE".equals(p[3])) listener.onGarbage(p[4], parseInt(p[5]));
-        if ("KO".equals(p[3])) listener.onKO(host, unesc(p[5]), unesc(p[6]));
-        if ("LEAVE".equals(p[3])) { listener.onLeave(host, p[4]); return; }
-        if ("KICK".equals(p[3])) { listener.onKick(host, p[4], unesc(p[5]), unesc(p[6])); return; }
-        if ("DISBAND".equals(p[3])) { listener.onDisband(host, p[4]); return; }
-        if ("SURRENDER".equals(p[3])) { listener.onSurrender(host, p[4]); return; }
-        if ("RETURN_LOBBY".equals(p[3])) { listener.onReturnLobby(host, p[4]); return; }
-        if ("RECONNECT".equals(p[3])) { listener.onReconnect(host, p[4]); return; }
-        if ("BOT_STATE".equals(p[3])) notifyBot(host, p, via);
+        if (ProtocolMessage.STATE.equals(p[3])) notifyPeer(host, p, via);
+        if (ProtocolMessage.READY.equals(p[3])) listener.onReady(host, p[4], parseInt(p[5]) == 1);
+        if (ProtocolMessage.CHAT.equals(p[3])) listener.onChat(host, p[4], unesc(p[5]));
+        if (ProtocolMessage.START.equals(p[3])) listener.onStart(host, parseLong(p[5]), parseLong(p[6]));
+        if (ProtocolMessage.GARBAGE.equals(p[3])) listener.onGarbage(p[4], parseInt(p[5]));
+        if (ProtocolMessage.KO.equals(p[3])) listener.onKO(host, unesc(p[5]), unesc(p[6]));
+        if (ProtocolMessage.LEAVE.equals(p[3])) { listener.onLeave(host, p[4]); return; }
+        if (ProtocolMessage.KICK.equals(p[3])) { listener.onKick(host, p[4], unesc(p[5]), unesc(p[6])); return; }
+        if (ProtocolMessage.DISBAND.equals(p[3])) { listener.onDisband(host, p[4]); return; }
+        if (ProtocolMessage.SURRENDER.equals(p[3])) { listener.onSurrender(host, p[4]); return; }
+        if (ProtocolMessage.RETURN_LOBBY.equals(p[3])) { listener.onReturnLobby(host, p[4]); return; }
+        if (ProtocolMessage.RECONNECT.equals(p[3])) { listener.onReconnect(host, p[4]); return; }
+        if (ProtocolMessage.BOT_STATE.equals(p[3])) notifyBot(host, p, via);
     }
 
     private void connectTcp(String host) {
@@ -291,11 +293,11 @@ public class P2pTransport {
     }
 
     private String helloPacket() {
-        return base("HELLO") + "|0|0|" + (hostRole ? 1 : 0) + "|0|" + playerId;
+        return base(ProtocolMessage.HELLO) + "|0|0|" + (hostRole ? 1 : 0) + "|0|" + playerId;
     }
 
     private String statePacket(String board) {
-        return base("STATE") + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|" + (board == null ? "" : board) + "|" + playerId;
+        return base(ProtocolMessage.STATE) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges + "|" + (board == null ? "" : board) + "|" + playerId;
     }
 
     private String statePacket() {
@@ -303,7 +305,7 @@ public class P2pTransport {
     }
 
     private String botStatePacket(String overrideName) {
-        return base("BOT_STATE", overrideName) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges;
+        return base(ProtocolMessage.BOT_STATE, overrideName) + "|" + score + "|" + lines + "|" + level + "|" + (over ? 1 : 0) + "|" + kos + "|" + badges;
     }
 
     private String base(String type) {
@@ -316,7 +318,7 @@ public class P2pTransport {
 
     private String[] split(String msg) {
         String[] p = msg.split("\\|", -1);
-        if (p.length < 8 || !"TG1".equals(p[0])) return null;
+        if (p.length < 8 || !ProtocolMessage.PROTOCOL_VERSION.equals(p[0])) return null;
         return p;
     }
 
