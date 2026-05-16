@@ -10,6 +10,7 @@ import com.echo.tetrislan.render.InvisibleRenderer;
 import com.echo.tetrislan.render.TrainingRenderer;
 import com.echo.tetrislan.render.MenuRenderer;
 import com.echo.tetrislan.render.Theme;
+import com.echo.tetrislan.render.HudRenderer;
 import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
@@ -68,13 +69,14 @@ public class TetrisView extends View implements Runnable {
     public int C = 10, R = 20;
     public static final int MAX_PLAYERS = 3;
 public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.29";
+    public static final String VERSION = "v1.26.30";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
     private final FxRenderer fxRenderer = new FxRenderer(p);
     private final InvisibleRenderer invisibleRenderer = new InvisibleRenderer();
     private final TrainingRenderer trainingRenderer = new TrainingRenderer(p);
+    private final HudRenderer hudRenderer = new HudRenderer(p);
     private final InputController inputController = new InputController(this);
     private final TouchRouter touchRouter = new TouchRouter(this);
     public final SoloModeController soloModeController = new SoloModeController(this);
@@ -385,7 +387,7 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
             return;
         }
         layoutGame(w, h);
-        drawTop(c);
+        hudRenderer.drawTop(c, statusBarH, solo, menu, gameMode, soloStage, trainTech, theme());
         if (invisible && !over) {
             int stack = InvisibleModeController.maxStackHeight(board, R);
             if (stack >= 15) invisibleDangerUntil = now + 1500;
@@ -408,13 +410,13 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
                 trainDemoTargetX, trainDemoTargetY,
                 trainDemoRotDir, trainTech);
         }
-        drawSide(c);
+        hudRenderer.drawSide(c, bx, bw, by, w, solo, next, hold, modeName(), modeProgress(), peerInfos, combo, b2b, kos, badges, theme());
         fxRenderer.drawParticles(c, particles, now);
         drawBtns(c);
         fxRenderer.drawFxOverlay(c, w, h, theme(), now, flashUntil, fxUntil, fxText);
         if (over) {
             if (!solo && rankingUntil > 0 && !rankingLines.isEmpty()) {
-                drawRankingOverlay(c, w, h);
+                hudRenderer.drawRankingOverlay(c, w, h, rankingLines);
             } else if (solo && !menu && gameMode == MODE_TRAINING) {
                 // Auto-reset handled in game loop, show minimal overlay
             } else if (solo && !menu && gameMode != MODE_CLASSIC) {
@@ -426,7 +428,7 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
                 p.setColor(Color.WHITE); p.setTextSize(46);
                 c.drawText(ft, w/2f, h/2f - 72, p);
             } else {
-                drawCenter(c, finishText.isEmpty() ? "游戏结束" : finishText, "点设置或主界面");
+                hudRenderer.drawCenter(c, w, h, finishText.isEmpty() ? "游戏结束" : finishText, "点设置或主界面", over, pendingIRS, pendingIHS);
             }
             if (solo && !menu && gameMode != MODE_CLASSIC) {
                 float btnW = Math.max(108, w * 0.31f), bhBtn = btnW * 0.56f;
@@ -463,7 +465,7 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
                 soloOverRetryBtn = null;
             }
         }
-        if (paused && !over) drawCenter(c, "暂停", "点暂停继续");
+        if (paused && !over) hudRenderer.drawCenter(c, w, h, "暂停", "点暂停继续", over, pendingIRS, pendingIHS);
         if (settings) drawSettings(c, w, h);
     }
 
@@ -498,101 +500,6 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
 
     private void addBtn(String text, int action, float cx, float cy, float w, float h) { btns.add(new Btn(text, action, new RectF(cx-w/2, cy-h/2, cx+w/2, cy+h/2))); }
 
-    private void drawTop(Canvas c) {
-        if (!solo || menu) return;
-        p.setTextAlign(Paint.Align.LEFT); p.setTextSize(28); p.setColor(theme().textMuted);
-        float sy = statusBarH + 8;
-        String stageInfo = "";
-        if (gameMode == MODE_SPRINT) stageInfo = "S" + soloStage + " 目标" + (40 * soloStage) + "行";
-        else if (gameMode == MODE_ULTRA) stageInfo = "S" + soloStage + " 目标" + (soloStage * 5000) + "分";
-        else if (gameMode == MODE_DIG) stageInfo = "S" + soloStage + " 目标" + (10 * soloStage) + "行";
-        else if (gameMode == MODE_MARATHON) stageInfo = "S" + soloStage + " 目标" + (150 * soloStage) + "行";
-        else if (gameMode == MODE_TRAINING) stageInfo = "练习: " + TrainingModeController.trainTechName(trainTech);
-        if (!stageInfo.isEmpty()) c.drawText(stageInfo, 12, sy + 100, p);
-    }
-
-
-
-    private void drawSide(Canvas c) {
-        float sx = bx + bw + 8;
-        float sideW = Math.max(110, getWidth() - sx - 6);
-        float cx = sx + sideW / 2;
-        float box = Math.min(160, sideW);
-        float y = by + 36;
-        p.setTextAlign(Paint.Align.CENTER); p.setTextSize(42); p.setColor(theme().textMuted);
-        c.drawText("下一个", cx, y, p); mini(c, next, cx-box/2, y+16, box);
-        y += 16 + box + 20;
-        c.drawText("暂存", cx, y, p); mini(c, hold==0?null:new Piece(hold), cx-box/2, y+16, box);
-        y += 16 + box + 24;
-        c.drawText(solo ? "模式" : "对手", cx, y, p);
-        if (solo) {
-            p.setColor(theme().score); p.setTextSize(32); c.drawText(modeName(), cx, y+38, p);
-            p.setColor(theme().text); p.setTextSize(24);
-            String progress = modeProgress();
-            String[] lines = progress.split("\n");
-            float lineH = 28;
-            for (int i = 0; i < lines.length; i++) {
-                c.drawText(lines[i], cx, y + 68 + i * lineH, p);
-            }
-            y += 68 + lines.length * lineH + 8;
-        } else {
-            p.setTextSize(22); p.setColor(theme().score);
-            for (PeerInfo pi : peerInfos.values()) {
-                y += 28;
-                String net = (System.currentTimeMillis() - pi.lastUpdateMs) > 2000 ? "!" : "";
-                String status = pi.over ? "KO" : (pi.score + "/" + pi.lines + " L" + pi.level);
-                c.drawText(pi.name + net + " " + status, cx, y, p);
-                // 迷你棋盘
-                if (pi.board != null) {
-                    y += 6;
-                    float miniCell = Math.min(8, (sideW - 20) / 10f);
-                    float miniBoardW = miniCell * 10;
-                    float miniBoardH = miniCell * 20;
-                    float miniX = cx - miniBoardW / 2;
-                    p.setColor(theme().board); c.drawRect(miniX, y, miniX + miniBoardW, y + miniBoardH, p);
-                    for (int r = 0; r < 20; r++) {
-                        for (int col = 0; col < 10; col++) {
-                            int val = pi.board[r][col];
-                            if (val != 0) {
-                                p.setColor(theme().colors[val]);
-                                c.drawRect(miniX + col * miniCell, y + r * miniCell,
-                                           miniX + (col + 1) * miniCell - 1, y + (r + 1) * miniCell - 1, p);
-                            }
-                        }
-                    }
-                    y += miniBoardH;
-                }
-            }
-            if (peerInfos.isEmpty()) {
-                y += 28;
-                c.drawText("等待玩家...", cx, y, p);
-            }
-            p.setColor(theme().textMuted);
-        }
-        y += 50;
-        p.setColor(theme().score); p.setTextSize(32);
-        float statLeft = sx + 10;
-        float statRight = sx + sideW - 10;
-        float lineH = 34;
-        p.setTextAlign(Paint.Align.LEFT);  c.drawText("连击", statLeft, y, p);
-        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(Math.max(0, combo)), statRight, y, p); y += lineH;
-        p.setTextAlign(Paint.Align.LEFT);  c.drawText("B2B", statLeft, y, p);
-        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(b2b), statRight, y, p); y += lineH;
-        p.setTextAlign(Paint.Align.LEFT);  c.drawText("KO", statLeft, y, p);
-        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(kos), statRight, y, p); y += lineH;
-        p.setTextAlign(Paint.Align.LEFT);  c.drawText("徽章", statLeft, y, p);
-        p.setTextAlign(Paint.Align.RIGHT); c.drawText(String.valueOf(badges), statRight, y, p);
-    }
-
-    private void mini(Canvas c, Piece pc, float x, float y, float box) {
-        p.setColor(theme().board); c.drawRoundRect(new RectF(x,y,x+box,y+box), 8, 8, p);
-        if (pc == null) return;
-        float z = box / 3.5f;
-        for (int r=0;r<pc.s.length;r++) for (int col=0;col<pc.s[r].length;col++) if (pc.s[r][col] != 0) {
-            p.setColor(theme().colors[pc.type]); c.drawRect(x+6+col*z, y+8+r*z, x+6+(col+1)*z-2, y+8+(r+1)*z-2, p);
-        }
-    }
-
     private void drawBtns(Canvas c) {
         p.setTextAlign(Paint.Align.CENTER);
         for (Btn b: btns) {
@@ -602,44 +509,6 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
             p.setColor(theme().text); c.drawText(b.text, b.r.centerX(), b.r.centerY()+(b.action>=8?12:13), p);
         }
     }
-
-    private void drawCenter(Canvas c, String a, String b) {
-        p.setTextAlign(Paint.Align.CENTER); p.setColor(0xdd000000); c.drawRoundRect(new RectF(50,getHeight()/2f-110,getWidth()-50,getHeight()/2f+110),24,24,p);
-        p.setColor(Color.WHITE); p.setTextSize(52); c.drawText(a, getWidth()/2f, getHeight()/2f-28, p);
-        p.setColor(0xffaaaaaa); p.setTextSize(34); c.drawText(b, getWidth()/2f, getHeight()/2f+32, p);
-        if (over && !menu) {
-            p.setColor(0xff888899); p.setTextSize(28);
-            String irsTxt = pendingIRS == 0 ? "预旋转: 无 (点旋转/逆旋)" : (pendingIRS > 0 ? "预旋转: 顺时针" : "预旋转: 逆时针");
-            String ihsTxt = "预暂存: " + (pendingIHS ? "开 (点暂存切换)" : "关 (点暂存切换)");
-            c.drawText(irsTxt, getWidth()/2f, getHeight()/2f+76, p);
-            c.drawText(ihsTxt, getWidth()/2f, getHeight()/2f+108, p);
-        }
-    }
-    private void drawRankingOverlay(Canvas c, int w, int h) {
-        int n = rankingLines.size();
-        if (n == 0) return;
-        float lineH = 44;
-        float pad = 24;
-        float boxH = n * lineH + pad * 2;
-        float top = h * 0.22f;
-        p.setColor(0xdd000000);
-        c.drawRoundRect(new RectF(w * 0.08f, top, w * 0.92f, top + boxH), 24, 24, p);
-        p.setTextAlign(Paint.Align.CENTER);
-        for (int i = 0; i < n; i++) {
-            String txt = rankingLines.get(i);
-            if (i == 0) {
-                p.setColor(0xffffff00); p.setTextSize(40);
-            } else {
-                p.setColor(Color.WHITE); p.setTextSize(32);
-            }
-            c.drawText(txt, w / 2f, top + pad + i * lineH + 28, p);
-        }
-        p.setColor(0xffaaaaaa); p.setTextSize(28);
-        c.drawText("点设置或主界面", w / 2f, top + boxH - 10, p);
-    }
-
-
-
 
     public void fx(String text, boolean strong) {
         fxText = text; fxUntil = System.currentTimeMillis() + 850; flashUntil = System.currentTimeMillis() + (strong ? 260 : 140);
