@@ -58,7 +58,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.25";
+    public static final String VERSION = "v1.26.26";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -1784,7 +1784,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
             bot.iq = Math.min(10, Math.max(3, avgLevel + 2));
             bot.actionSpeed = Math.min(10, Math.max(2, avgLevel + speedAdj));
             // 放慢bot下落速度：基础延迟 + 等级因子减弱 + actionSpeed影响减小
-            bot.dropDelay = Math.max(1050, Math.min(3600, 4200 - bot.level * 15 - bot.actionSpeed * 7));
+            bot.dropDelay = Math.max(100, 3200 - bot.level * 120 - bot.actionSpeed * 130);
 
             // Bot AI tick
             botTick(bot);
@@ -1878,7 +1878,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
                     botLock(bot);
                 }
             }
-            bot.thinkUntil = now + Math.max(600, 2700 - bot.actionSpeed * 13);
+            bot.thinkUntil = now + Math.max(80, 1500 - bot.actionSpeed * 100);
         }
     }
 
