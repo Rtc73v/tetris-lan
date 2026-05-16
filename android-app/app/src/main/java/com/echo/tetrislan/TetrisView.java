@@ -13,6 +13,7 @@ import com.echo.tetrislan.render.Theme;
 import com.echo.tetrislan.ui.Btn;
 import com.echo.tetrislan.ui.TouchUtil;
 import com.echo.tetrislan.net.PeerInfo;
+import com.echo.tetrislan.net.BotPlayer;
 
 import com.echo.tetrislan.core.Piece;
 import com.echo.tetrislan.core.GameClock;
@@ -56,7 +57,7 @@ public class TetrisView extends View implements Runnable {
     private int C = 10, R = 20;
     private static final int MAX_PLAYERS = 3;
 private static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.18";
+    public static final String VERSION = "v1.26.19";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -1691,46 +1692,6 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
     private int[][] board(JSONArray a)throws Exception{ int[][] b=new int[R][C]; for(int y=0;y<R;y++){JSONArray row=a.getJSONArray(y); for(int x=0;x<C;x++) b[y][x]=row.getInt(x);} return b; }
 
     private interface TextDone { void apply(String text); }
-    private static class BotPlayer {
-        String name;
-        String hostKey;
-        int[][] board = new int[20][10];
-        Piece cur;
-        Piece next;
-        int hold = 0;
-        int score = 0, lines = 0, level = 1;
-        boolean over = false;
-        long thinkUntil = 0;
-        int dropDelay = 600;
-        int actionSpeed = 3; // 1-10, higher = faster
-        int iq = 5; // 1-10
-        long lastTick = 0;
-        int pendingGarbage = 0;
-        int combo = -1, b2b = 0, badges = 0, kos = 0;
-        String lastAttacker = "";
-        long garbageDueAt = 0;
-        boolean canHold = true;
-        int bagIndex = 7;
-        int[] bag = new int[7];
-        Random rnd;
-        BotPlayer(String name, String hostKey, long seed) {
-            this.name = name; this.hostKey = hostKey;
-            this.rnd = new Random(seed ^ name.hashCode());
-            fillBag();
-        }
-        void fillBag() {
-            for (int i = 0; i < 7; i++) bag[i] = i + 1;
-            for (int i = 6; i > 0; i--) {
-                int j = rnd.nextInt(i + 1);
-                int t = bag[i]; bag[i] = bag[j]; bag[j] = t;
-            }
-            bagIndex = 0;
-        }
-        Piece randomPiece() {
-            if (bagIndex >= 7) fillBag();
-            return new Piece(bag[bagIndex++]);
-        }
-    }
 
     private final java.util.Map<String, BotPlayer> bots = new java.util.HashMap<>();
     private int nextBotId = 1;
@@ -1852,8 +1813,8 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
 
         // AI decision making
         if (bot.cur != null && bot.thinkUntil <= now) {
-            BotDecision bestCur = evaluateBest(bot);
-            BotDecision bestHold = null;
+            BotPlayer.BotDecision bestCur = evaluateBest(bot);
+            BotPlayer.BotDecision bestHold = null;
             if (bot.hold != 0 && bot.canHold && bestCur != null) {
                 int savedType = bot.cur.type;
                 bot.cur = new Piece(bot.hold);
@@ -1870,7 +1831,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
                 bot.cur.rot = 0;
                 bot.hold = t;
             }
-            BotDecision best = bestCur;
+            BotPlayer.BotDecision best = bestCur;
             if (bestHold != null && bestHold.score > bestCur.score) {
                 int t = bot.cur.type;
                 bot.cur = new Piece(bot.hold);
@@ -1911,16 +1872,10 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
         }
     }
 
-    private static class BotDecision {
-        int x, rot;
-        boolean hardDrop;
-        double score = 0;
-        BotDecision(int x, int rot, boolean hardDrop) { this.x = x; this.rot = rot; this.hardDrop = hardDrop; }
-    }
 
-    private BotDecision evaluateBest(BotPlayer bot) {
+    private BotPlayer.BotDecision evaluateBest(BotPlayer bot) {
         if (bot.cur == null) return null;
-        BotDecision best = null;
+        BotPlayer.BotDecision best = null;
         double bestScore = -1e9;
         int originalX = bot.cur.x;
         int originalY = bot.cur.y;
@@ -1947,7 +1902,7 @@ else{level=lines/10+1;dropMs=Math.max(80,1000-(level-1)*90);} int garbage=garbag
                 double s = evaluateBoard(bot);
                 if (s > bestScore) {
                     bestScore = s;
-                    best = new BotDecision(tx, bot.cur.rot, true);
+                    best = new BotPlayer.BotDecision(tx, bot.cur.rot, true);
                     best.score = s;
                 }
             }
