@@ -69,7 +69,7 @@ public class TetrisView extends View implements Runnable {
     public int C = 10, R = 20;
     public static final int MAX_PLAYERS = 3;
 public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_MARATHON = 3, MODE_INVISIBLE = 4, MODE_DIG = 5, MODE_TRAINING = 6;
-    public static final String VERSION = "v1.26.30";
+    public static final String VERSION = "v1.26.33";
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final MenuRenderer menuRenderer = new MenuRenderer(p);
     private final BoardRenderer boardRenderer = new BoardRenderer(p);
@@ -392,7 +392,7 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
             int stack = InvisibleModeController.maxStackHeight(board, R);
             if (stack >= 15) invisibleDangerUntil = now + 1500;
         }
-        boardRenderer.drawBoard(c, layoutState, theme(), board, cur, ghostY(), invisible, over, now,
+        boardRenderer.drawBoard(c, layoutState, theme(), board, cur, cur == null ? 0 : ghostY(), invisible, over, now,
             invisibleFlashUntil, invisiblePreviewUntil, invisibleDangerUntil,
             invisibleNearUntil, invisibleNearCY, invisibleNearCX, level,
             pendingGarbage, garbageDueAt, score, lines);
@@ -540,7 +540,7 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
             menuRenderer.drawMenuButton(c,  "+", w*0.74f, y, w*0.74f+btnW, y+rowH*0.85f, false, theme());
         }
         menuRenderer.drawMenuButton(c,  "返回主界面", w*.16f, h*.82f, w*.84f, h*.89f, false, theme());
-        if (confirmQuit) {
+        if (solo && confirmQuit) {
             p.setColor(0x88000000); c.drawRect(0, 0, w, h, p);
             float dw=w*.78f, dh=h*.30f, dx=(w-dw)/2, dy=(h-dh)/2;
             p.setStyle(Paint.Style.FILL); p.setColor(theme().bg);
@@ -786,6 +786,7 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
 
     private void hardDrop() {
         long now = System.currentTimeMillis();
+        if (cur == null || over) return;
         if (!hardReady || now - lastHard < HARD_COOLDOWN_MS) return;
         hardReady = false;
         lastHard = now;
@@ -1073,7 +1074,7 @@ public static final int MODE_CLASSIC = 0, MODE_SPRINT = 1, MODE_ULTRA = 2, MODE_
     private void rotate(boolean cw){ if(cur==null)return; int[][] ns=rot(cur.s,cw); int newRot=(cur.rot+(cw?1:3))%4; int idx=cw?cur.rot*2:((cur.rot+3)%4)*2+1; int[][][] table=(cur.type==1)?SRS_I:SRS_JLSTZ; for(int ki=0;ki<table[idx].length;ki++){ int[] k=table[idx][ki]; if(ok(cur,k[0],k[1],ns)){cur.s=ns;cur.x+=k[0];cur.y+=k[1];cur.rot=newRot;cur.spin=(cur.type==3);lastActionWasRotate=(cur.type==3);cur.mini=(cur.type==3&&ki>0&&ki<4);if(onGround&&lockResets<MAX_LOCK_RESETS){lockUntil=System.currentTimeMillis()+LOCK_DELAY_MS;lockResets++;}tone(sRotate);return;} } }
     public int[][] rot(int[][] s, boolean cw){ int n=s.length; int[][] a=new int[n][n]; for(int r=0;r<n;r++) for(int c=0;c<n;c++) if(cw)a[c][n-1-r]=s[r][c]; else a[n-1-c][r]=s[r][c]; return a; }
     private int ghostY(){ int y=cur.y; while(ok(cur,0,y-cur.y+1,cur.s)) y++; return y; }
-    private void lock(){ int spinType=Rules.checkTSpin(board, R, C, cur, lastActionWasRotate); boolean trainLandedOnTarget=TrainingModeController.trainingTargetMatched(cur, trainDemoPiece, trainDemoTargetX, trainDemoTargetY); boolean lockOut=false; for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy<0) lockOut=true; else board[yy][cur.x+x]=cur.type;} // 隐身模式：落点附近闪现
+    private void lock(){ if(cur==null)return; int spinType=Rules.checkTSpin(board, R, C, cur, lastActionWasRotate); boolean trainLandedOnTarget=TrainingModeController.trainingTargetMatched(cur, trainDemoPiece, trainDemoTargetX, trainDemoTargetY); boolean lockOut=false; for(int r=0;r<cur.s.length;r++) for(int x=0;x<cur.s[r].length;x++) if(cur.s[r][x]!=0){int yy=cur.y+r; if(yy<0) lockOut=true; else board[yy][cur.x+x]=cur.type;} // 隐身模式：落点附近闪现
         if(invisible&&!lockOut){int cy=0,cx=0,cnt=0;for(int r=0;r<cur.s.length;r++)for(int x2=0;x2<cur.s[r].length;x2++)if(cur.s[r][x2]!=0){cy+=cur.y+r;cx+=cur.x+x2;cnt++;}invisibleNearCY=cnt>0?cy/cnt:-1;invisibleNearCX=cnt>0?cx/cnt:-1;invisibleNearUntil=System.currentTimeMillis()+InvisibleModeController.invisibleRevealMs(level, dropMs, board, R);}
         if(lockOut){if(solo&&gameMode==MODE_TRAINING){trainResetAt=System.currentTimeMillis()+1000;cur=null;next=TrainingModeController.trainNextPiece(trainTech);return;}finishGame("游戏结束");return;} int n=doClear(spinType);        if(solo&&gameMode==MODE_TRAINING){boolean ok=TrainingModeController.trainSuccess(trainTech, spinType, n, trainLandedOnTarget);if(ok){trainSuccess++;trainFailText="";fx("✓ "+TrainingModeController.trainTechName(trainTech)+" "+trainSuccess,true);}else{trainFailText=TrainingModeController.trainFailReason(trainTech, lastActionWasRotate, spinType, n, trainLandedOnTarget);fx(trainFailText,false);}trainResetAt=System.currentTimeMillis()+1000;cur=null;next=TrainingModeController.trainNextPiece(trainTech);return;}        if(checkModeFinish()) return; if(n>0){areUntil=System.currentTimeMillis()+ARE_MS;clearing=true;}else{applyGarbage();spawn();} }
     private int doClear(int spinType){ int n=0; int garbageCleared=0; for(int y=R-1;y>=0;y--){ boolean full=true; for(int x=0;x<C;x++) if(board[y][x]==0){full=false;break;} if(full){ boolean hasGarbage=false; if(solo&&gameMode==MODE_DIG){ for(int x=0;x<C;x++) if(isGarbage[y][x]){hasGarbage=true;break;} } lineBurst(y); for(int yy=y;yy>0;yy--){ board[yy]=board[yy-1].clone(); if(solo&&gameMode==MODE_DIG) isGarbage[yy]=isGarbage[yy-1].clone(); } board[0]=new int[C]; if(solo&&gameMode==MODE_DIG) isGarbage[0]=new boolean[C]; n++; y++; if(solo&&gameMode==MODE_DIG && hasGarbage) garbageCleared++; }}        if(n>0){ invisibleFlashUntil=System.currentTimeMillis()+Math.min(InvisibleModeController.invisibleRevealMs(level, dropMs, board, R)+700, 5000); combo++; boolean difficult=n==4||spinType>=1; if(difficult)b2b++; else b2b=0; int base=new int[]{0,100,300,500,800}[n]; if(spinType==2) base=n==1?800:n==2?1200:1600; else if(spinType==1) base=n==1?200:n==2?400:600; int bonus=combo>0?combo*50:0; score+=(base+bonus)*level; lines+=n; if(solo&&gameMode==MODE_DIG) digCleared+=garbageCleared; if(solo&&gameMode==MODE_MARATHON){level=soloStage;dropMs=Math.max(120,1000-(soloStage-1)*100);}

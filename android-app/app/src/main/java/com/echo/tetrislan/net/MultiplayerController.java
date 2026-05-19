@@ -69,7 +69,6 @@ public class MultiplayerController {
     }
     public boolean canHostStart() {
         if (!view.isHost || view.pendingStartAt > 0) return false;
-        if (!view.selfReady) return false;
         int pc = playerCount();
         if (pc < 2) return false;
         for (java.util.Map.Entry<String, PeerInfo> e : view.peerInfos.entrySet()) {

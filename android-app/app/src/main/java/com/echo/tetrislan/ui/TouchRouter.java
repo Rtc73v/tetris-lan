@@ -142,9 +142,9 @@ public class TouchRouter {
             float dw = w * .78f, dh = h * .28f, dy = (h - dh) / 2;
             float btnW = dw * .27f, btnH = dh * .22f, btnY = dy + dh * .72f, gap = dw * .05f;
             float bx1 = w / 2f - btnW * 1.5f - gap, bx2 = w / 2f - btnW / 2f, bx3 = w / 2f + btnW / 2f + gap;
-            if (TouchUtil.hit(x, y, bx1, btnY, bx1 + btnW, btnY + btnH)) { tv.saveManager.save(true); tv.confirmQuit = false; tv.goMenu(); return true; }
-            if (TouchUtil.hit(x, y, bx2, btnY, bx2 + btnW, btnY + btnH)) { tv.confirmQuit = false; tv.goMenu(); return true; }
-            if (TouchUtil.hit(x, y, bx3, btnY, bx3 + btnW, btnY + btnH)) { tv.confirmQuit = false; return true; }
+            if (tv.solo && TouchUtil.hit(x, y, bx1, btnY, bx1 + btnW, btnY + btnH)) { tv.saveManager.save(true); tv.confirmQuit = false; tv.goMenu(); return true; }
+            if (tv.solo && TouchUtil.hit(x, y, bx2, btnY, bx2 + btnW, btnY + btnH)) { tv.confirmQuit = false; tv.goMenu(); return true; }
+            if (tv.solo && TouchUtil.hit(x, y, bx3, btnY, bx3 + btnW, btnY + btnH)) { tv.confirmQuit = false; return true; }
             return true;
         }
         if (tv.solo && TouchUtil.hit(x, y, w * .16f, h * .26f, w * .84f, h * .33f)) { tv.settings = false; tv.setPaused(false); return true; }
@@ -170,6 +170,7 @@ public class TouchRouter {
             }
         }
         if (TouchUtil.hit(x, y, w * .16f, h * .82f, w * .84f, h * .89f)) {
+            if (!tv.solo) { tv.goMenu(); return true; }
             if (!tv.over && !tv.menu) { tv.confirmQuit = true; return true; }
             tv.goMenu(); return true;
         }
